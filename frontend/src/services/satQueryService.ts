@@ -97,29 +97,56 @@ export const satQueryService = {
       await new Promise(r => setTimeout(r, 450));
     }
 
-    // Match query or fallback to dynamic generation based on observations count & modality
+    // Dynamic prompt intent parsing to select appropriate AI specialist model & evidence
+    const queryLower = queryText.toLowerCase();
     const count = activeObservations.length;
     const isMultiDate = count >= 2;
-    const hasSar = activeObservations.some(o => o.modality === 'SAR');
 
-    let matchedScenario = DEMO_SCENARIOS[0];
-    if (isMultiDate) {
-      matchedScenario = DEMO_SCENARIOS[2];
-    } else if (hasSar) {
-      matchedScenario = DEMO_SCENARIOS[3];
-    } else if (activeObservations.some(o => o.modality === 'MULTISPECTRAL')) {
-      matchedScenario = DEMO_SCENARIOS[1];
+    let matchedScenario = DEMO_SCENARIOS[0]; // Default VQA Optical
+
+    if (queryLower.includes('water') || queryLower.includes('lake') || queryLower.includes('flood') || queryLower.includes('river') || queryLower.includes('ndwi') || queryLower.includes('hydro') || queryLower.includes('reservoir')) {
+      matchedScenario = DEMO_SCENARIOS[1]; // Water Grounding / NDWI
+    } else if (queryLower.includes('ship') || queryLower.includes('vessel') || queryLower.includes('sar') || queryLower.includes('radar') || queryLower.includes('port') || queryLower.includes('maritime') || queryLower.includes('sea')) {
+      matchedScenario = DEMO_SCENARIOS[3]; // SAR Ship Detection / Maritime
+    } else if (queryLower.includes('change') || queryLower.includes('growth') || queryLower.includes('compare') || queryLower.includes('urban') || queryLower.includes('building') || queryLower.includes('date') || isMultiDate) {
+      matchedScenario = DEMO_SCENARIOS[2]; // Bi-temporal Change Detection
+    } else if (queryLower.includes('vegetation') || queryLower.includes('forest') || queryLower.includes('crop') || queryLower.includes('ndvi') || queryLower.includes('greenery')) {
+      matchedScenario = DEMO_SCENARIOS[1]; // Multispectral / Vegetation Index
     }
 
-    // Synthesize result dynamically matching active query
+    // Synthesize result dynamically matching active query prompt
     const baseResult = matchedScenario.presetResult;
+    
+    // Customize headline and answer based on query text if custom user prompt
+    let dynamicHeadline = baseResult.headline;
+    let dynamicTask = baseResult.task;
+    let dynamicAnswer = baseResult.answer;
+
+    if (queryLower.includes('water')) {
+      dynamicHeadline = "Water Body Surface Extent & Hydrological Boundary Mapped";
+      dynamicTask = "Multispectral NDWI Water Grounding & Change Analysis";
+      dynamicAnswer = `Analysis of water indices across selected observations identified key surface water boundaries. Spectral band processing confirms high moisture retention and active hydrological channels.`;
+    } else if (queryLower.includes('ship') || queryLower.includes('vessel')) {
+      dynamicHeadline = "Maritime Vessel Congestion & Polarized SAR Detection";
+      dynamicTask = "SAR Cross-Modality Ship Grounding & Tracking";
+      dynamicAnswer = `Dual-polarization SAR backscatter processing detected high-intensity metallic signatures corresponding to maritime vessels and port infrastructure.`;
+    } else if (queryLower.includes('vegetation') || queryLower.includes('crop')) {
+      dynamicHeadline = "NDVI Vegetation Density & Canopy Health Mapped";
+      dynamicTask = "Multispectral Crop & Forest Health Index Analysis";
+      dynamicAnswer = `Near-Infrared (NIR) to Red band ratio calculations indicate healthy canopy density across active agricultural plots with optimal photosynthetic absorption.`;
+    }
+
     const customResult: AnalysisResult = {
       ...baseResult,
       id: `res-run-${Date.now()}`,
       queryText: queryText,
+      task: dynamicTask,
+      headline: dynamicHeadline,
+      answer: dynamicAnswer,
       timestamp: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase() + ' ' + new Date().toISOString().substring(11, 16) + ' UTC',
       executionSummary: {
         ...baseResult.executionSummary,
+        task: dynamicTask,
         inputs: activeObservations.map(o => o.filename),
         telemetryId: `SQ-TEL-${Date.now().toString().slice(-8)}`
       }
