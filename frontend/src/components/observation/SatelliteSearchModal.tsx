@@ -356,8 +356,47 @@ export const SatelliteSearchModal: React.FC<SatelliteSearchModalProps> = ({
                   </div>
 
                   {searchResults.length === 0 ? (
-                    <div className="rounded-xl border border-sat-border bg-sat-bg/30 p-8 text-center font-mono text-xs text-sat-dim">
-                      No satellite scenes found matching the spatial, date range, or cloud cover criteria.
+                    <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-6 text-center font-mono text-xs text-sat-dim space-y-4">
+                      <div className="flex items-center justify-center gap-2 text-amber-400 font-bold">
+                        <AlertCircle className="h-4 w-4" />
+                        <span>No Satellite Scenes Found for Current Filter Criteria</span>
+                      </div>
+                      <p className="text-[11px] text-sat-dim max-w-lg mx-auto leading-relaxed">
+                        Tropical areas like the <strong className="text-sat-text">Amazon Rainforest</strong> often have high cloud cover. 
+                        A strict <strong className="text-sat-text">{maxCloudCover}% cloud cover filter</strong> or narrow date range can eliminate all available images.
+                      </p>
+                      
+                      <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
+                        <button
+                          onClick={() => {
+                            setMaxCloudCover(60);
+                            setTimeout(handleExecuteSearch, 100);
+                          }}
+                          className="px-3 py-1.5 rounded border border-sat-accent/40 bg-sat-accent/10 text-sat-accent font-bold text-[10px] hover:bg-sat-accent/20 transition-all flex items-center gap-1.5"
+                        >
+                          ⚡ Increase Cloud Cover to 60% & Retry
+                        </button>
+                        <button
+                          onClick={() => {
+                            setStartDate('2024-01-01');
+                            setEndDate('2024-08-30');
+                            setTimeout(handleExecuteSearch, 100);
+                          }}
+                          className="px-3 py-1.5 rounded border border-sat-border bg-sat-surface text-sat-text font-bold text-[10px] hover:border-sat-accent transition-all flex items-center gap-1.5"
+                        >
+                          📅 Expand Date Range (Jan - Aug 2024)
+                        </button>
+                        <button
+                          onClick={() => {
+                            handleSelectPresetLocation([55.15, 25.05, 55.35, 25.25]); // Dubai
+                            setMaxCloudCover(15);
+                            setTimeout(handleExecuteSearch, 100);
+                          }}
+                          className="px-3 py-1.5 rounded border border-sat-border bg-sat-surface text-sat-text font-bold text-[10px] hover:border-sat-accent transition-all flex items-center gap-1.5"
+                        >
+                          ☀️ Try Dubai Coast (Clear Skies)
+                        </button>
+                      </div>
                     </div>
                   ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[320px] overflow-y-auto pr-1">
