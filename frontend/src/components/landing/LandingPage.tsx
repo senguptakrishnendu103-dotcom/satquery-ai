@@ -68,6 +68,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnterWorkspace, onVi
   const [activePointIndex, setActivePointIndex] = useState(0);
   const [orbitAngle, setOrbitAngle] = useState(0);
   const [scanPulse, setScanPulse] = useState(false);
+  const [mode, setMode] = useState<'SIMULATION' | 'LIVE_SCAN'>('SIMULATION');
+  const [liveCoords, setLiveCoords] = useState({ lat: 39.5696, lon: 2.6502 });
 
   // Mouse telemetry tracking
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -85,21 +87,30 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnterWorkspace, onVi
   useEffect(() => {
     if (isReducedMotion) return;
 
+    const speed = mode === 'LIVE_SCAN' ? 1.5 : 0.5;
     const orbitInterval = setInterval(() => {
-      setOrbitAngle(prev => (prev + 0.5) % 360);
+      setOrbitAngle(prev => (prev + speed) % 360);
     }, 40);
 
     const scanInterval = setInterval(() => {
       setScanPulse(true);
       setTimeout(() => setScanPulse(false), 1200);
-      setActivePointIndex(prev => (prev + 1) % OBSERVATION_POINTS.length);
-    }, 5000);
+      if (mode === 'SIMULATION') {
+        setActivePointIndex(prev => (prev + 1) % OBSERVATION_POINTS.length);
+      } else {
+        // In Live Scan, subtly update live coordinates
+        setLiveCoords(prev => ({
+          lat: +(prev.lat + (Math.random() * 0.008 - 0.004)).toFixed(4),
+          lon: +(prev.lon + (Math.random() * 0.008 - 0.004)).toFixed(4)
+        }));
+      }
+    }, mode === 'LIVE_SCAN' ? 2500 : 5000);
 
     return () => {
       clearInterval(orbitInterval);
       clearInterval(scanInterval);
     };
-  }, [isReducedMotion]);
+  }, [isReducedMotion, mode]);
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!canvasRef.current) return;
@@ -110,6 +121,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnterWorkspace, onVi
   };
 
   const currentObs = OBSERVATION_POINTS[activePointIndex];
+  const displayLat = mode === 'LIVE_SCAN' ? `${liveCoords.lat}° N` : currentObs.lat;
+  const displayLon = mode === 'LIVE_SCAN' ? `${liveCoords.lon}° E` : currentObs.lon;
 
   return (
     <div className="min-h-[calc(100vh-3.5rem)] flex flex-col justify-between relative bg-transparent text-sat-text selection:bg-sat-accent/20 transition-colors duration-200 overflow-x-hidden">
@@ -136,16 +149,33 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnterWorkspace, onVi
             {/* Top Bar Telemetry Header */}
             <div className="flex items-center justify-between font-mono text-[10px] text-sat-dim border-b border-sat-border/50 p-4 pb-3">
               <div className="flex items-center space-x-2">
-                <Radar className="w-4 h-4 text-sat-accent animate-spin" style={{ animationDuration: '8s' }} />
+                <Radar className={`w-4 h-4 ${mode === 'LIVE_SCAN' ? 'text-red-400 animate-pulse' : 'text-sat-accent animate-spin'}`} style={{ animationDuration: mode === 'LIVE_SCAN' ? '1s' : '8s' }} />
                 <span className="text-sat-text font-bold uppercase tracking-wider">
                   EARTH OBSERVATION CANVAS
                 </span>
               </div>
-              <div className="flex items-center space-x-2">
-                <span className="px-2 py-0.5 rounded bg-sat-panel/70 border border-sat-border/60 text-sat-accent font-semibold">
+              <div className="flex items-center space-x-1 p-0.5 bg-black/40 rounded-lg border border-sat-border/40">
+                <button
+                  onClick={() => setMode('SIMULATION')}
+                  className={`px-2.5 py-1 rounded text-[10px] font-bold transition-all ${
+                    mode === 'SIMULATION'
+                      ? 'bg-sat-accent text-sat-bg shadow-sm'
+                      : 'text-sat-dim hover:text-sat-text'
+                  }`}
+                >
                   SIMULATION
-                </span>
-                <span className="text-sat-stable font-bold hidden sm:inline">LIVE SCAN</span>
+                </button>
+                <button
+                  onClick={() => setMode('LIVE_SCAN')}
+                  className={`px-2.5 py-1 rounded text-[10px] font-bold flex items-center space-x-1 transition-all ${
+                    mode === 'LIVE_SCAN'
+                      ? 'bg-red-500/90 text-white shadow-sm animate-pulse'
+                      : 'text-sat-dim hover:text-sat-text'
+                  }`}
+                >
+                  <span className={`w-1.5 h-1.5 rounded-full ${mode === 'LIVE_SCAN' ? 'bg-white' : 'bg-red-500'}`} />
+                  <span>LIVE SCAN</span>
+                </button>
               </div>
             </div>
 
@@ -163,7 +193,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnterWorkspace, onVi
                 <circle cx="200" cy="200" r="185" fill="none" stroke="var(--color-sat-border)" strokeWidth="1" strokeDasharray="3 3" />
                 
                 <ellipse 
-                  cx="200" cy="200" rx="170" ry="85" fill="none" stroke="var(--color-sat-accent)" strokeWidth="1.5" strokeOpacity="0.4" strokeDasharray="8 4"
+                  cx="200" cy="200" rx="170" ry="85" fill="none" stroke={mode === 'LIVE_SCAN' ? '#ef4444' : 'var(--color-sat-accent)'} strokeWidth="1.5" strokeOpacity="0.4" strokeDasharray="8 4"
                   style={{
                     transform: `rotate(-20deg)`,
                     transformOrigin: '200px 200px'
@@ -193,15 +223,15 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnterWorkspace, onVi
                     <g>
                       <line 
                         x1={satX} y1={satY} x2={targetX} y2={targetY} 
-                        stroke="var(--color-sat-accent)" strokeWidth="1" strokeDasharray="3 3" strokeOpacity="0.6" 
+                        stroke={mode === 'LIVE_SCAN' ? '#ef4444' : 'var(--color-sat-accent)'} strokeWidth="1" strokeDasharray="3 3" strokeOpacity="0.6" 
                       />
 
-                      <circle cx={satX} cy={satY} r="6" fill="var(--color-sat-accent)" />
-                      <circle cx={satX} cy={satY} r="12" fill="none" stroke="var(--color-sat-accent)" strokeWidth="1" strokeOpacity="0.8">
+                      <circle cx={satX} cy={satY} r="6" fill={mode === 'LIVE_SCAN' ? '#ef4444' : 'var(--color-sat-accent)'} />
+                      <circle cx={satX} cy={satY} r="12" fill="none" stroke={mode === 'LIVE_SCAN' ? '#ef4444' : 'var(--color-sat-accent)'} strokeWidth="1" strokeOpacity="0.8">
                         <animate attributeName="r" values="6;16;6" dur="2s" repeatCount="indefinite" />
                       </circle>
-                      <text x={satX + 10} y={satY - 8} fill="var(--color-sat-accent)" fontSize="9" fontFamily="JetBrains Mono" fontWeight="bold">
-                        SAT_01
+                      <text x={satX + 10} y={satY - 8} fill={mode === 'LIVE_SCAN' ? '#ef4444' : 'var(--color-sat-accent)'} fontSize="9" fontFamily="JetBrains Mono" fontWeight="bold">
+                        {mode === 'LIVE_SCAN' ? 'LIVE_SAT_SENTINEL' : 'SAT_01'}
                       </text>
                     </g>
                   );
@@ -215,17 +245,18 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnterWorkspace, onVi
                     <g>
                       <rect 
                         x={targetX - 25} y={targetY - 20} width="50" height="40" 
-                        fill="rgba(2, 132, 199, 0.15)" stroke="var(--color-sat-change)" strokeWidth="1.5" strokeDasharray="4 2"
+                        fill={mode === 'LIVE_SCAN' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(2, 132, 199, 0.15)'} 
+                        stroke={mode === 'LIVE_SCAN' ? '#ef4444' : 'var(--color-sat-change)'} strokeWidth="1.5" strokeDasharray="4 2"
                       />
 
                       {scanPulse && (
-                        <circle cx={targetX} cy={targetY} r="35" fill="none" stroke="var(--color-sat-change)" strokeWidth="2">
+                        <circle cx={targetX} cy={targetY} r="35" fill="none" stroke={mode === 'LIVE_SCAN' ? '#ef4444' : 'var(--color-sat-change)'} strokeWidth="2">
                           <animate attributeName="r" values="10;45" dur="1s" repeatCount="1" />
                           <animate attributeName="opacity" values="1;0" dur="1s" repeatCount="1" />
                         </circle>
                       )}
 
-                      <circle cx={targetX} cy={targetY} r="3" fill="var(--color-sat-change)" />
+                      <circle cx={targetX} cy={targetY} r="3" fill={mode === 'LIVE_SCAN' ? '#ef4444' : 'var(--color-sat-change)'} />
                     </g>
                   );
                 })()}
@@ -244,13 +275,17 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnterWorkspace, onVi
 
               <div className="absolute top-2 left-2 bg-sat-surface/80 backdrop-blur-md border border-sat-border/50 p-2.5 rounded-md font-mono text-[10px] space-y-1 text-sat-text shadow-lg max-w-[190px]">
                 <div className="flex justify-between items-center text-sat-accent font-bold border-b border-sat-border/40 pb-1 mb-1">
-                  <span>{currentObs.id}</span>
-                  <span className="text-[9px] text-sat-stable uppercase">{currentObs.status}</span>
+                  <span>{mode === 'LIVE_SCAN' ? 'LIVE-PASS' : currentObs.id}</span>
+                  <span className={`text-[9px] uppercase font-bold ${mode === 'LIVE_SCAN' ? 'text-red-400 animate-pulse' : 'text-sat-stable'}`}>
+                    {mode === 'LIVE_SCAN' ? 'STREAMING' : currentObs.status}
+                  </span>
                 </div>
-                <div>LAT: <span className="text-sat-accent font-bold">{currentObs.lat}</span></div>
-                <div>LON: <span className="text-sat-accent font-bold">{currentObs.lon}</span></div>
-                <div>SENSOR: <span className="text-sat-text">{currentObs.sensor}</span></div>
-                <div className="text-sat-change font-bold pt-0.5 truncate">{currentObs.delta}</div>
+                <div>LAT: <span className="text-sat-accent font-bold">{displayLat}</span></div>
+                <div>LON: <span className="text-sat-accent font-bold">{displayLon}</span></div>
+                <div>SENSOR: <span className="text-sat-text">{mode === 'LIVE_SCAN' ? 'CDSE REALTIME STAC' : currentObs.sensor}</span></div>
+                <div className="text-sat-change font-bold pt-0.5 truncate">
+                  {mode === 'LIVE_SCAN' ? '🔴 Live Downlink Active' : currentObs.delta}
+                </div>
               </div>
 
               <div className="absolute bottom-2 right-2 flex items-center space-x-1 font-mono text-[9px] bg-sat-surface/80 backdrop-blur-md border border-sat-border/50 p-1 rounded">
