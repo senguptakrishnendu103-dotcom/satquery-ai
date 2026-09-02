@@ -1,0 +1,265 @@
+@import "tailwindcss";
+
+@theme {
+  --color-sat-bg: #F8EFE0;
+  /* Buttery Golden Parchment Base */
+  --color-sat-surface: #FFF9EF;
+  /* Warm Ivory Cream Surface */
+  --color-sat-panel: #F1E4CE;
+  /* Toasted Oat Linen Panel */
+  --color-sat-card: #E9D8BA;
+  /* Honeyed Sandstone Card */
+  --color-sat-border: #D8C2A0;
+  /* Warm Caramel Taupe Border */
+  --color-sat-borderLight: #A88B68;
+  /* Rich Cognac Earth */
+  --color-sat-text: #241A10;
+  /* Deep Espresso Brown-Black Text */
+  --color-sat-muted: #5C4632;
+  /* Warm Cocoa */
+  --color-sat-dim: #8C7256;
+  /* Warm Hazelnut Stone */
+  --color-sat-accent: #0284C7;
+  /* Precision Ocean Blue Accent */
+  --color-sat-change: #D97706;
+  /* Warm Amber */
+  --color-sat-stable: #047857;
+  /* Deep Warm Emerald */
+  --color-sat-sar: #7E22CE;
+
+  --font-sans: 'Inter', system-ui, sans-serif;
+  --font-display: 'Space Grotesk', 'Inter', sans-serif;
+  --font-serif: 'Newsreader', Georgia, serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+}
+
+:root {
+  color-scheme: light;
+  --color-sat-bg: #F8EFE0;
+  --color-sat-surface: #FFF9EF;
+  --color-sat-panel: #F1E4CE;
+  --color-sat-card: #E9D8BA;
+  --color-sat-border: #D8C2A0;
+  --color-sat-borderLight: #A88B68;
+  --color-sat-text: #241A10;
+  --color-sat-muted: #5C4632;
+  --color-sat-dim: #8C7256;
+  --color-sat-accent: #0284C7;
+  --color-sat-change: #D97706;
+  --color-sat-stable: #047857;
+  --color-sat-sar: #7E22CE;
+}
+
+/* Extra-Cozy Warm Parchment Theme Overrides */
+html.light {
+  color-scheme: light;
+  --color-sat-bg: #F8EFE0 !important;
+  --color-sat-surface: #FFF9EF !important;
+  --color-sat-panel: #F1E4CE !important;
+  --color-sat-card: #E9D8BA !important;
+  --color-sat-border: #D8C2A0 !important;
+  --color-sat-borderLight: #A88B68 !important;
+  --color-sat-text: #241A10 !important;
+  --color-sat-muted: #5C4632 !important;
+  --color-sat-dim: #8C7256 !important;
+  --color-sat-accent: #0284C7 !important;
+  --color-sat-change: #D97706 !important;
+  --color-sat-stable: #047857 !important;
+  --color-sat-sar: #7E22CE !important;
+
+  /* Cozy texture tokens — used below for grain, shadow & glow. Dark theme never reads these. */
+  --cozy-grain: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix type='matrix' values='0 0 0 0 0.14  0 0 0 0 0.10  0 0 0 0 0.06  0 0 0 0.05 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  --shadow-cozy: 0 1px 2px rgba(90, 62, 27, 0.06), 0 10px 24px -8px rgba(120, 84, 38, 0.18);
+  --shadow-cozy-sm: 0 1px 2px rgba(90, 62, 27, 0.08), 0 4px 10px -4px rgba(120, 84, 38, 0.16);
+  --glow-warm: radial-gradient(ellipse 900px 600px at 15% -5%, rgba(255, 200, 120, 0.35), transparent 60%),
+    radial-gradient(ellipse 700px 500px at 100% 10%, rgba(255, 170, 100, 0.18), transparent 65%);
+}
+
+/* Ambient warm sunlight glow, sitting behind all content — light theme only */
+html.light body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image: var(--glow-warm);
+}
+
+/* Soft paper grain + lifted, warm-tinted shadow on the app's warm surfaces.
+   Auto-applies to any element using the bg-sat-surface / bg-sat-panel / bg-sat-card
+   utilities so no markup changes are needed; dark mode is untouched since this
+   whole block is scoped under html.light. */
+html.light [class*="bg-sat-surface"],
+html.light [class*="bg-sat-panel"],
+html.light [class*="bg-sat-card"] {
+  background-image: var(--cozy-grain);
+  background-blend-mode: multiply;
+  box-shadow: var(--shadow-cozy);
+}
+
+/* Opt-in utility classes for anything the attribute-selector above doesn't catch —
+   add these directly to a component's className if it needs the cozy treatment. */
+html.light .cozy-grain {
+  background-image: var(--cozy-grain);
+  background-blend-mode: multiply;
+}
+
+html.light .cozy-shadow {
+  box-shadow: var(--shadow-cozy);
+}
+
+html.light .cozy-shadow-sm {
+  box-shadow: var(--shadow-cozy-sm);
+}
+
+html.light .cozy-glow {
+  background-image: var(--glow-warm);
+}
+
+/* Scientific Dark Theme Overrides */
+html.dark {
+  color-scheme: dark;
+  --color-sat-bg: #080C11 !important;
+  --color-sat-surface: #0B0F17 !important;
+  --color-sat-panel: #0F172A !important;
+  --color-sat-card: #1E293B !important;
+  --color-sat-border: #334155 !important;
+  --color-sat-borderLight: #475569 !important;
+  --color-sat-text: #F8FAFC !important;
+  --color-sat-muted: #94A3B8 !important;
+  --color-sat-dim: #64748B !important;
+  --color-sat-accent: #38BDF8 !important;
+  --color-sat-change: #F59E0B !important;
+  --color-sat-stable: #10B981 !important;
+  --color-sat-sar: #A855F7 !important;
+}
+
+/* High contrast text helpers for slate classes */
+html.light .text-slate-100,
+html.light .text-slate-200,
+:root .text-slate-100,
+:root .text-slate-200 {
+  color: #241A10 !important;
+}
+
+html.light .text-slate-300,
+html.light .text-slate-400,
+:root .text-slate-300,
+:root .text-slate-400 {
+  color: #5C4632 !important;
+}
+
+html.dark .text-slate-100,
+html.dark .text-slate-200 {
+  color: #F8FAFC !important;
+}
+
+html.dark .text-slate-300,
+html.dark .text-slate-400 {
+  color: #94A3B8 !important;
+}
+
+body {
+  background-color: #080C11;
+  background-image: url('/galaxy_space_bg.png');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+  color: var(--color-sat-text);
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  transition: color 0.25s ease;
+}
+
+.font-serif-display {
+  font-family: 'Newsreader', Georgia, serif;
+}
+
+/* Delicate Warm GIS Grid Pattern */
+.bg-gis-grid {
+  background-size: 32px 32px;
+  background-image:
+    linear-gradient(to right, rgba(122, 113, 101, 0.14) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(122, 113, 101, 0.14) 1px, transparent 1px);
+}
+
+.bg-gis-cross {
+  background-size: 64px 64px;
+  background-image:
+    radial-gradient(circle at 1px 1px, rgba(2, 132, 199, 0.25) 1px, transparent 0);
+}
+
+/* Precision Scrollbar */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-sat-bg);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-sat-border);
+  border-radius: 2px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-sat-accent);
+}
+
+/* Monospace badge styling */
+.mono-tag {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+/* Custom Image Slider Wipe */
+.slider-thumb::-webkit-slider-thumb {
+  appearance: none;
+  width: 16px;
+  height: 48px;
+  background-color: var(--color-sat-accent);
+  cursor: ew-resize;
+  border-radius: 2px;
+  box-shadow: 0 0 10px rgba(2, 132, 199, 0.4);
+}
+
+/* Live Cosmic Drift Animation */
+@keyframes cosmicDrift {
+  0% {
+    transform: scale(1.08) rotate(0deg) translate3d(0, 0, 0);
+  }
+
+  20% {
+    transform: scale(1.14) rotate(1.4deg) translate3d(-2%, 1.4%, 0);
+  }
+
+  40% {
+    transform: scale(1.20) rotate(2.6deg) translate3d(1.6%, -1.8%, 0);
+  }
+
+  60% {
+    transform: scale(1.16) rotate(1.8deg) translate3d(2.2%, 1%, 0);
+  }
+
+  80% {
+    transform: scale(1.11) rotate(0.8deg) translate3d(-1.4%, -1%, 0);
+  }
+
+  100% {
+    transform: scale(1.08) rotate(0deg) translate3d(0, 0, 0);
+  }
+}
+
+.animate-cosmicDrift {
+  animation: cosmicDrift 14s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-cosmicDrift {
+    animation: none;
+  }
+}

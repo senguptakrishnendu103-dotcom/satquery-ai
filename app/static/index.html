@@ -1,0 +1,1133 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SatQuery AI | Ask questions. Understand Earth.</title>
+  <meta name="description"
+    content="SatQuery AI is an AI-powered remote-sensing analysis platform for understanding Earth imagery through natural language questions, modular remote-sensing models, and visual evidence overlay.">
+  <meta name="theme-color" content="#0b0f14">
+
+  <!-- Open Graph / social preview -->
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="SatQuery AI | Ask questions. Understand Earth.">
+  <meta property="og:description"
+    content="Query satellite imagery in natural language — VQA, grounding, bi-temporal change detection, and optical/SAR fusion with auditable results.">
+  <meta property="og:image" content="/static/assets/og-preview.png">
+  <meta name="twitter:card" content="summary_large_image">
+
+  <link rel="stylesheet" href="/static/styles.css">
+  <link rel="icon" href="/static/assets/favicon.ico">
+
+  <!-- Preconnect to icon CDN so the font/script fetch starts earlier -->
+  <link rel="preconnect" href="https://unpkg.com">
+
+  <!-- Minimal, self-contained styles for the skip link only — everything else stays in styles.css -->
+  <style>
+    .skip-link {
+      position: absolute;
+      top: -40px;
+      left: 8px;
+      z-index: 1000;
+      padding: 8px 14px;
+      background: #0b0f14;
+      color: #fff;
+      border-radius: 4px;
+      text-decoration: none;
+    }
+
+    .skip-link:focus {
+      top: 8px;
+    }
+  </style>
+
+  <!-- Lucide Icons CDN (deferred so it never blocks first paint) -->
+  <script src="https://unpkg.com/lucide@latest" defer></script>
+
+  <style>
+    /* ================================================================
+       SATQUERY NEXT-LEVEL RESULT PANEL
+       Scoped to .sq-result-card so existing app styles remain intact.
+       ================================================================ */
+    .sq-result-card {
+      position: relative;
+      overflow: hidden;
+      border: 1px solid var(--border-color, #334155);
+      border-radius: 10px;
+      background: color-mix(in srgb, var(--surface, #0b0f17) 94%, transparent);
+      box-shadow: 0 18px 55px rgba(0, 0, 0, .28);
+    }
+
+    .sq-result-card::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      opacity: .035;
+      background-image:
+        linear-gradient(to right, currentColor 1px, transparent 1px),
+        linear-gradient(to bottom, currentColor 1px, transparent 1px);
+      background-size: 28px 28px;
+    }
+
+    .sq-result-header,
+    .sq-result-grid,
+    .sq-followup,
+    .sq-result-footer {
+      position: relative;
+      z-index: 1;
+    }
+
+    .sq-result-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border-color, #334155);
+      background: rgba(255, 255, 255, .018);
+    }
+
+    .sq-result-status {
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      min-width: 0;
+    }
+
+    .sq-status-icon {
+      width: 34px;
+      height: 34px;
+      flex: 0 0 34px;
+      display: grid;
+      place-items: center;
+      border: 1px solid rgba(16, 185, 129, .32);
+      border-radius: 7px;
+      background: rgba(16, 185, 129, .08);
+      color: var(--emerald, #10b981);
+    }
+
+    .sq-status-icon svg {
+      width: 18px;
+      height: 18px;
+    }
+
+    .sq-result-heading {
+      min-width: 0;
+    }
+
+    .sq-result-kicker {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 7px;
+      font-family: var(--font-mono, monospace);
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--emerald, #10b981);
+    }
+
+    .sq-result-kicker #res-task {
+      color: var(--text-muted, #94a3b8);
+      font-weight: 600;
+    }
+
+    .sq-divider {
+      color: var(--border-light, #475569);
+    }
+
+    .sq-result-subline {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 4px;
+      font-family: var(--font-mono, monospace);
+      font-size: 8px;
+      letter-spacing: .09em;
+      color: var(--text-muted, #94a3b8);
+    }
+
+    .sq-live-dot,
+    .sq-footer-dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      display: inline-block;
+      background: var(--emerald, #10b981);
+      box-shadow: 0 0 8px currentColor;
+    }
+
+    .sq-replay-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      flex: 0 0 auto;
+      padding: 8px 11px;
+      border-radius: 6px;
+      cursor: pointer;
+      border: 1px solid rgba(56, 189, 248, .4);
+      background: rgba(56, 189, 248, .055);
+      color: var(--cyan, #38bdf8);
+      font-family: var(--font-mono, monospace);
+      font-size: 9px;
+      font-weight: 800;
+      letter-spacing: .08em;
+      transition: .2s ease;
+    }
+
+    .sq-replay-btn:hover {
+      background: var(--cyan, #38bdf8);
+      color: #071018;
+      border-color: var(--cyan, #38bdf8);
+    }
+
+    .sq-replay-btn svg {
+      width: 13px;
+      height: 13px;
+      fill: currentColor;
+    }
+
+    .sq-result-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.65fr) minmax(180px, .72fr) minmax(240px, 1fr);
+      gap: 0;
+    }
+
+    .sq-result-section {
+      min-width: 0;
+      background: rgba(255, 255, 255, .008);
+    }
+
+    .sq-result-section+.sq-result-section {
+      border-left: 1px solid var(--border-color, #334155);
+    }
+
+    .sq-section-head {
+      min-height: 38px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 9px 12px;
+      border-bottom: 1px solid var(--border-color, #334155);
+    }
+
+    .sq-section-title {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-family: var(--font-mono, monospace);
+      font-size: 8px;
+      font-weight: 800;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--text-muted, #94a3b8);
+    }
+
+    .sq-section-title svg {
+      width: 13px;
+      height: 13px;
+      color: var(--cyan, #38bdf8);
+    }
+
+    .sq-verified-chip,
+    .sq-audit-state,
+    .sq-confidence-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 6px;
+      border-radius: 4px;
+      font-family: var(--font-mono, monospace);
+      font-size: 7px;
+      font-weight: 800;
+      letter-spacing: .08em;
+    }
+
+    .sq-verified-chip {
+      color: var(--emerald, #10b981);
+      background: rgba(16, 185, 129, .07);
+      border: 1px solid rgba(16, 185, 129, .22);
+    }
+
+    .sq-verified-chip svg {
+      width: 10px;
+      height: 10px;
+    }
+
+    .sq-audit-state {
+      color: var(--cyan, #38bdf8);
+      background: rgba(56, 189, 248, .06);
+      border: 1px solid rgba(56, 189, 248, .18);
+    }
+
+    .sq-confidence-label {
+      color: var(--emerald, #10b981);
+    }
+
+    .sq-answer-body {
+      padding: 13px;
+    }
+
+    .sq-answer-body h3 {
+      margin: 0;
+      color: var(--text-main, #f8fafc);
+      font-family: var(--font-heading, system-ui, sans-serif);
+      font-size: 16px;
+      line-height: 1.3;
+      font-weight: 750;
+    }
+
+    .sq-answer-text {
+      margin-top: 8px;
+      color: var(--text-muted, #94a3b8);
+      font-size: 11px;
+      line-height: 1.65;
+    }
+
+    .sq-disclaimer {
+      margin-top: 11px !important;
+    }
+
+    .sq-confidence-section {
+      padding-bottom: 12px;
+    }
+
+    .sq-confidence-main {
+      display: flex;
+      align-items: baseline;
+      gap: 4px;
+      padding: 14px 13px 4px;
+    }
+
+    .sq-confidence-number {
+      font-family: var(--font-heading, system-ui, sans-serif);
+      font-size: 32px;
+      line-height: 1;
+      font-weight: 800;
+      color: var(--text-main, #f8fafc);
+    }
+
+    .sq-confidence-unit {
+      font-family: var(--font-mono, monospace);
+      font-size: 9px;
+      color: var(--text-muted, #94a3b8);
+    }
+
+    .sq-confidence-legacy {
+      margin: 3px 13px 10px;
+      display: none;
+    }
+
+    .sq-confidence-meter {
+      height: 5px;
+      margin: 0 13px;
+      overflow: hidden;
+      border-radius: 4px;
+      background: var(--panel, #0f172a);
+      border: 1px solid var(--border-color, #334155);
+    }
+
+    .sq-confidence-fill {
+      height: 100%;
+      border-radius: 4px;
+      background: var(--emerald, #10b981);
+      transition: width .6s ease;
+    }
+
+    .sq-confidence-note {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 7px 13px 0;
+      font-family: var(--font-mono, monospace);
+      font-size: 7px;
+      text-transform: uppercase;
+      color: var(--text-muted, #94a3b8);
+    }
+
+    #res-confidence-note {
+      color: var(--emerald, #10b981);
+      text-align: right;
+    }
+
+    .sq-audit-list {
+      padding: 8px 12px 11px;
+    }
+
+    .sq-audit-row {
+      display: grid;
+      grid-template-columns: 64px minmax(0, 1fr);
+      gap: 8px;
+      padding: 5px 0;
+      border-bottom: 1px solid rgba(148, 163, 184, .07);
+    }
+
+    .sq-audit-row:last-child {
+      border-bottom: 0;
+    }
+
+    .sq-audit-label {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      color: var(--text-muted, #94a3b8);
+      font-family: var(--font-mono, monospace);
+      font-size: 8px;
+    }
+
+    .sq-audit-label svg {
+      width: 10px;
+      height: 10px;
+      color: var(--cyan, #38bdf8);
+    }
+
+    .sq-audit-value {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      text-align: right;
+      color: var(--text-main, #f8fafc);
+      font-family: var(--font-mono, monospace);
+      font-size: 8px;
+    }
+
+    .sq-audit-value.model {
+      color: var(--cyan, #38bdf8);
+    }
+
+    .sq-followup {
+      padding: 10px 12px;
+      border-top: 1px solid var(--border-color, #334155);
+    }
+
+    .sq-followup-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .sq-followup-head>span {
+      font-family: var(--font-mono, monospace);
+      font-size: 7px;
+      color: var(--text-muted, #94a3b8);
+      letter-spacing: .08em;
+    }
+
+    .sq-followup-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .sq-followup-action {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 6px 8px;
+      border-radius: 5px;
+      border: 1px solid var(--border-color, #334155);
+      background: rgba(255, 255, 255, .018);
+      color: var(--text-muted, #94a3b8);
+      font-family: var(--font-mono, monospace);
+      font-size: 8px;
+      cursor: pointer;
+      transition: .2s ease;
+    }
+
+    .sq-followup-action:hover {
+      color: var(--cyan, #38bdf8);
+      border-color: rgba(56, 189, 248, .45);
+      background: rgba(56, 189, 248, .05);
+    }
+
+    .sq-result-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 8px 12px;
+      border-top: 1px solid var(--border-color, #334155);
+      background: rgba(255, 255, 255, .012);
+    }
+
+    .sq-footer-status,
+    .sq-footer-meta {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-family: var(--font-mono, monospace);
+      font-size: 7px;
+      letter-spacing: .08em;
+      color: var(--text-muted, #94a3b8);
+    }
+
+    .sq-footer-status {
+      color: var(--emerald, #10b981);
+    }
+
+    .sq-footer-separator {
+      color: var(--border-light, #475569);
+    }
+
+    @media (max-width: 1050px) {
+      .sq-result-grid {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .sq-answer-section {
+        grid-column: 1 / -1;
+        border-bottom: 1px solid var(--border-color, #334155);
+      }
+
+      .sq-result-section+.sq-result-section {
+        border-left: 0;
+      }
+
+      .sq-confidence-section {
+        border-right: 1px solid var(--border-color, #334155);
+      }
+    }
+
+    @media (max-width: 680px) {
+      .sq-result-header {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .sq-replay-btn {
+        width: 100%;
+        justify-content: center;
+      }
+
+      .sq-result-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .sq-answer-section,
+      .sq-confidence-section {
+        border-right: 0;
+        border-bottom: 1px solid var(--border-color, #334155);
+      }
+
+      .sq-result-footer {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .sq-footer-meta {
+        flex-wrap: wrap;
+      }
+    }
+  </style>
+
+</head>
+
+<body>
+
+  <a class="skip-link" href="#workspace">Skip to main content</a>
+
+  <!-- TOP NAVIGATION BAR -->
+  <header class="navbar">
+    <div class="brand-container">
+      <div class="brand-logo">
+        <i data-lucide="radar" aria-hidden="true"></i>
+      </div>
+      <div class="brand-text">
+        <h1>SATQUERY AI</h1>
+        <div class="brand-tagline">Ask questions. Understand Earth.</div>
+      </div>
+    </div>
+
+    <nav class="nav-menu" aria-label="Primary">
+      <button class="nav-link active" id="btn-nav-workspace" aria-current="page" onclick="showSection('workspace')">
+        <i data-lucide="layout-dashboard" aria-hidden="true"></i> Workspace
+      </button>
+      <button class="nav-link" id="btn-nav-history" aria-haspopup="dialog" onclick="openModal('modal-history')">
+        <i data-lucide="history" aria-hidden="true"></i> History
+      </button>
+      <button class="nav-link" id="btn-nav-models" aria-haspopup="dialog" onclick="openModal('modal-models')">
+        <i data-lucide="cpu" aria-hidden="true"></i> Model Registry
+      </button>
+      <button class="nav-link" id="btn-nav-datasets" aria-haspopup="dialog" onclick="openModal('modal-datasets')">
+        <i data-lucide="database" aria-hidden="true"></i> RS Adaptation
+      </button>
+      <button class="nav-link" id="btn-nav-about" aria-haspopup="dialog" onclick="openModal('modal-about')">
+        <i data-lucide="info" aria-hidden="true"></i> About
+      </button>
+    </nav>
+
+    <div class="system-status">
+      <div class="status-badge" role="status">
+        <div class="pulse-dot" aria-hidden="true"></div>
+        <span>AGENT ORCHESTRATOR ONLINE</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN WORKSPACE CONTAINER -->
+  <main class="workspace-container" id="workspace">
+
+    <!-- LEFT PANEL: INPUT DATA & CONFIGURATION -->
+    <aside class="panel" aria-label="Input configuration">
+      <div class="panel-header">
+        <div class="panel-title">
+          <i data-lucide="layers" aria-hidden="true"></i> Input Configuration
+        </div>
+        <span class="file-tag" id="input-mode-badge">MODE A: SINGLE IMAGE</span>
+      </div>
+
+      <div class="panel-body">
+
+        <!-- Input Mode Selector -->
+        <fieldset style="border: none; margin: 0; padding: 0;">
+          <legend class="section-label">Select Analysis Mode</legend>
+          <div class="mode-selector">
+
+            <label class="mode-card active" id="card-mode-single" onclick="setInputMode('single_image')">
+              <input type="radio" name="input_mode_radio" value="single_image" checked class="mode-radio">
+              <div class="mode-info">
+                <h4>Mode A — Single Image</h4>
+                <p>Optical / remote-sensing scene VQA, captioning & grounding</p>
+              </div>
+            </label>
+
+            <label class="mode-card" id="card-mode-bitemporal" onclick="setInputMode('bi_temporal')">
+              <input type="radio" name="input_mode_radio" value="bi_temporal" class="mode-radio">
+              <div class="mode-info">
+                <h4>Mode B — Bi-Temporal Images</h4>
+                <p>Compare two dates (e.g. 2024 vs 2026) for change detection</p>
+              </div>
+            </label>
+
+            <label class="mode-card" id="card-mode-multimodal" onclick="setInputMode('optical_sar')">
+              <input type="radio" name="input_mode_radio" value="optical_sar" class="mode-radio">
+              <div class="mode-info">
+                <h4>Mode C — Optical + SAR</h4>
+                <p>Cross-modal Sentinel-2 RGB + Sentinel-1 SAR backscatter fusion</p>
+              </div>
+            </label>
+
+          </div>
+        </fieldset>
+
+        <!-- Built-in Demo Scenarios Loader -->
+        <div>
+          <label class="section-label" for="demo-selector">Built-in Demo Scenarios</label>
+          <select id="demo-selector" class="demo-select-box" onchange="loadDemoScenario(this.value)">
+            <option value="demo_1" selected>Demo 1: Land-Cover Description (Single Optical)</option>
+            <option value="demo_2">Demo 2: Water-Body Grounding & Localization</option>
+            <option value="demo_3">Demo 3: Bi-Temporal Change Analysis (2024 vs 2026)</option>
+            <option value="demo_4">Demo 4: Optical + SAR Multi-Modal Fusion</option>
+          </select>
+        </div>
+
+        <!-- Drag & Drop Upload Zone -->
+        <div>
+          <div class="section-label" id="upload-label">Upload Satellite Imagery</div>
+          <div class="dropzone" id="dropzone" role="button" tabindex="0" aria-labelledby="upload-label"
+            onclick="document.getElementById('file-input').click()"
+            onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();document.getElementById('file-input').click();}">
+            <div class="dropzone-icon"><i data-lucide="upload-cloud" aria-hidden="true"></i></div>
+            <div class="dropzone-text">+ Upload Image (PNG, GeoTIFF, JPG)</div>
+            <div class="dropzone-sub">Drag & drop satellite image file or click to browse</div>
+            <input type="file" id="file-input" style="display: none;" accept="image/*,.tif,.tiff"
+              aria-label="Upload satellite image file" onchange="handleFileSelect(event)">
+          </div>
+        </div>
+
+        <!-- Uploaded Images List & Metadata Inspection -->
+        <div>
+          <div class="section-label" id="active-images-label">Active Satellite Images</div>
+          <div class="file-list" id="file-list" aria-labelledby="active-images-label">
+            <!-- Dynamically populated -->
+          </div>
+        </div>
+
+      </div>
+    </aside>
+
+    <!-- CENTER PANEL: INTERACTIVE SATELLITE CANVAS VIEWER -->
+    <section class="panel viewer-panel" aria-label="Satellite imagery viewer">
+      <div class="viewer-toolbar">
+        <div class="tool-group" role="group" aria-label="Zoom controls">
+          <button class="tool-btn" onclick="zoomIn()" title="Zoom In" aria-label="Zoom in"><i data-lucide="zoom-in"
+              aria-hidden="true"></i> Zoom</button>
+          <button class="tool-btn" onclick="zoomOut()" title="Zoom Out" aria-label="Zoom out"><i data-lucide="zoom-out"
+              aria-hidden="true"></i></button>
+          <button class="tool-btn" onclick="resetZoom()" title="Reset Zoom" aria-label="Reset zoom"><i
+              data-lucide="rotate-ccw" aria-hidden="true"></i> Reset</button>
+        </div>
+
+        <div class="tool-group" role="group" aria-label="View mode">
+          <button class="tool-btn active" id="btn-toggle-overlay" aria-pressed="true" onclick="toggleOverlay()"><i
+              data-lucide="eye" aria-hidden="true"></i> Overlay</button>
+          <button class="tool-btn" id="btn-toggle-split" aria-pressed="false" onclick="toggleSplitView()"><i
+              data-lucide="columns" aria-hidden="true"></i> Split Compare</button>
+        </div>
+
+        <div class="slider-container">
+          <label for="opacity-slider">Mask Opacity:</label>
+          <input type="range" id="opacity-slider" min="0" max="100" value="85"
+            oninput="updateOverlayOpacity(this.value)">
+          <span id="opacity-val" aria-live="polite">85%</span>
+        </div>
+      </div>
+
+      <div class="canvas-viewport" id="viewport">
+        <div class="satellite-canvas-container" id="canvas-container">
+          <!-- Primary Base Image -->
+          <img id="satellite-base-img" class="satellite-img" src="/static/assets/optical_2024.png"
+            alt="Base satellite optical image of the current scene" decoding="async" onload="redrawCanvasOverlay()">
+
+          <!-- Bi-temporal Split Overlay (for Mode B comparison) -->
+          <div class="split-viewer-overlay" id="split-overlay" style="display: none; width: 50%;">
+            <img id="satellite-secondary-img" src="/static/assets/optical_2026.png"
+              alt="Secondary satellite optical image for bi-temporal comparison" loading="lazy" decoding="async">
+          </div>
+
+          <!-- HTML5 Canvas for Visual Evidence Masks & Bounding Boxes -->
+          <canvas id="overlay-canvas" class="overlay-canvas" role="img"
+            aria-label="Visual evidence overlay: detected masks and bounding boxes"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <!-- RIGHT PANEL: QUERY INTERFACE & AGENT RESULT -->
+    <aside class="panel" aria-label="Query and results">
+      <div class="panel-header">
+        <div class="panel-title">
+          <i data-lucide="sparkles" aria-hidden="true"></i> Ask SatQuery AI
+        </div>
+        <span class="status-badge" style="font-size: 9px; padding: 2px 6px;">MODULAR REGISTRY</span>
+      </div>
+
+      <div class="panel-body">
+
+        <!-- Natural Language Query Box -->
+        <div class="query-box">
+          <label class="section-label" for="query-textarea">Ask Earth Question</label>
+          <div class="query-input-wrapper">
+            <textarea id="query-textarea" class="query-textarea"
+              placeholder="e.g. Describe the major land-cover types visible..."
+              aria-label="Ask a question about the satellite imagery"></textarea>
+            <button class="btn-analyze" onclick="executeAnalysis()">
+              <i data-lucide="zap" aria-hidden="true"></i> RUN SATQUERY AGENT
+            </button>
+          </div>
+        </div>
+
+        <!-- Suggested Queries Chips -->
+        <div>
+          <div class="section-label" id="suggested-queries-label">Suggested Queries</div>
+          <div class="suggested-chips" id="suggested-chips" aria-labelledby="suggested-queries-label">
+            <!-- Populated dynamically based on demo/input mode -->
+          </div>
+        </div>
+
+        <!-- Processing Sequence Tracker (Animates during execution) -->
+        <div class="processing-tracker" id="processing-tracker" style="display: none;" aria-live="polite">
+          <div class="section-label" style="color: var(--cyan);">Agent Execution Sequence</div>
+          <div id="tracker-steps"></div>
+        </div>
+
+        <!-- ========================================================= -->
+        <!-- NEXT-LEVEL ANALYTICAL RESULT CARD                        -->
+        <!-- Existing IDs are preserved for app.js compatibility.    -->
+        <!-- ========================================================= -->
+        <div class="result-card sq-result-card" id="result-card" style="display: none;" aria-live="polite">
+
+          <!-- Result Header -->
+          <div class="sq-result-header">
+            <div class="sq-result-status">
+              <div class="sq-status-icon" aria-hidden="true">
+                <i data-lucide="check-circle-2"></i>
+              </div>
+              <div class="sq-result-heading">
+                <div class="sq-result-kicker">
+                  <span>ANALYSIS COMPLETE</span>
+                  <span class="sq-divider">/</span>
+                  <span id="res-task">SINGLE_IMAGE_VQA</span>
+                </div>
+                <div class="sq-result-subline">
+                  <span class="sq-live-dot" aria-hidden="true"></span>
+                  EVIDENCE-GROUNDED SATELLITE INTELLIGENCE
+                </div>
+              </div>
+            </div>
+
+            <div class="sq-result-actions" style="display: flex; gap: 8px; align-items: center;">
+              <button class="sq-replay-btn" type="button" onclick="downloadIntelligenceBriefPDF()"
+                style="background: var(--parchment-accent, #c9933b); color: #fff; border-color: transparent;"
+                aria-label="Export Intelligence Brief PDF">
+                <i data-lucide="file-down" aria-hidden="true"></i>
+                <span>EXPORT PDF BRIEF</span>
+              </button>
+              <button class="sq-replay-btn" type="button" onclick="openModal('modal-history')"
+                aria-label="Replay or review analysis execution">
+                <i data-lucide="play" aria-hidden="true"></i>
+                <span>REPLAY ANALYSIS</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Main Intelligence Grid -->
+          <div class="sq-result-grid">
+
+            <!-- Intelligence Answer -->
+            <section class="sq-result-section sq-answer-section" aria-label="Analysis answer">
+              <div class="sq-section-head">
+                <div class="sq-section-title">
+                  <i data-lucide="file-search" aria-hidden="true"></i>
+                  <span>INTELLIGENCE RESULT</span>
+                </div>
+                <span class="sq-verified-chip">
+                  <i data-lucide="shield-check" aria-hidden="true"></i>
+                  VERIFIED
+                </span>
+              </div>
+
+              <div class="sq-answer-body">
+                <h3 id="res-headline">Satellite analysis result</h3>
+                <div class="sq-answer-text" id="res-answer">
+                  Natural language analysis report will appear here.
+                </div>
+
+                <div class="disclaimer-text sq-disclaimer">
+                  <i data-lucide="alert-circle" aria-hidden="true"></i>
+                  <span>AI-assisted remote-sensing analysis. Review results for critical decisions.</span>
+                </div>
+              </div>
+            </section>
+
+            <!-- Confidence -->
+            <section class="sq-result-section sq-confidence-section" aria-label="Model confidence">
+              <div class="sq-section-head">
+                <div class="sq-section-title">
+                  <i data-lucide="shield-check" aria-hidden="true"></i>
+                  <span>CONFIDENCE</span>
+                </div>
+                <span class="sq-confidence-label" id="res-confidence-label">HIGH</span>
+              </div>
+
+              <div class="sq-confidence-main">
+                <span class="sq-confidence-number" id="res-confidence-number">94</span>
+                <span class="sq-confidence-unit">/ 100</span>
+              </div>
+
+              <!-- Existing ID preserved because app.js may update it -->
+              <div class="confidence-badge sq-confidence-legacy">
+                <i data-lucide="shield-check" aria-hidden="true"></i>
+                <span id="res-confidence">Model Confidence: 94%</span>
+              </div>
+
+              <div class="sq-confidence-meter" aria-hidden="true">
+                <div class="sq-confidence-fill" id="res-confidence-fill" style="width: 94%;"></div>
+              </div>
+
+              <div class="sq-confidence-note">
+                <span>MODEL CERTAINTY</span>
+                <span id="res-confidence-note">High confidence response</span>
+              </div>
+            </section>
+
+            <!-- Audit Summary -->
+            <section class="sq-result-section sq-audit-section" aria-label="Auditable execution summary">
+              <div class="sq-section-head">
+                <div class="sq-section-title">
+                  <i data-lucide="shield" aria-hidden="true"></i>
+                  <span>EXECUTION AUDIT</span>
+                </div>
+                <span class="sq-audit-state">TRACE READY</span>
+              </div>
+
+              <div class="sq-audit-list">
+                <div class="sq-audit-row">
+                  <span class="sq-audit-label"><i data-lucide="target" aria-hidden="true"></i>Task</span>
+                  <span class="sq-audit-value" id="audit-task">Single Image Land-Cover VQA</span>
+                </div>
+                <div class="sq-audit-row">
+                  <span class="sq-audit-label"><i data-lucide="cpu" aria-hidden="true"></i>Model</span>
+                  <span class="sq-audit-value model" id="audit-model">RS-VQA Transformer v2.4</span>
+                </div>
+                <div class="sq-audit-row">
+                  <span class="sq-audit-label"><i data-lucide="database" aria-hidden="true"></i>Inputs</span>
+                  <span class="sq-audit-value" id="audit-inputs">Optical (2024-06-15)</span>
+                </div>
+                <div class="sq-audit-row">
+                  <span class="sq-audit-label"><i data-lucide="wrench" aria-hidden="true"></i>Tools</span>
+                  <span class="sq-audit-value" id="audit-tools">Raster pre-processor, Feature Overlay Engine</span>
+                </div>
+                <div class="sq-audit-row">
+                  <span class="sq-audit-label"><i data-lucide="clock-3" aria-hidden="true"></i>Timestamp</span>
+                  <span class="sq-audit-value" id="audit-time">2026-08-25 00:33 UTC</span>
+                </div>
+              </div>
+            </section>
+          </div>
+
+          <!-- Follow-up analytical actions; existing app can populate this dynamically -->
+          <div class="sq-followup" id="result-followups">
+            <div class="sq-followup-head">
+              <div class="sq-section-title">
+                <i data-lucide="corner-down-right" aria-hidden="true"></i>
+                <span>CONTINUE ANALYSIS</span>
+              </div>
+              <span>FOLLOW-UP ACTIONS</span>
+            </div>
+            <div class="sq-followup-actions" id="result-followup-actions">
+              <!-- Populated by app.js when available -->
+            </div>
+          </div>
+
+          <!-- Bottom result telemetry -->
+          <div class="sq-result-footer">
+            <div class="sq-footer-status">
+              <span class="sq-footer-dot" aria-hidden="true"></span>
+              <span>EVIDENCE-GROUNDED RESULT</span>
+            </div>
+            <div class="sq-footer-meta">
+              <span>AUDIT TRAIL AVAILABLE</span>
+              <span class="sq-footer-separator">•</span>
+              <span>SATQUERY INTELLIGENCE ENGINE</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </aside>
+
+  </main>
+
+  <!-- HISTORY MODAL DRAWER -->
+  <div class="modal-backdrop" id="modal-history" role="dialog" aria-modal="true" aria-labelledby="modal-history-title">
+    <div class="modal-window">
+      <div class="modal-header">
+        <div class="modal-title" id="modal-history-title"><i data-lucide="history" aria-hidden="true"></i> Analysis
+          History Log</div>
+        <button class="modal-close" onclick="closeModal('modal-history')" aria-label="Close history">&times;</button>
+      </div>
+      <div class="modal-body" id="history-modal-body">
+        <p style="color: var(--text-muted);">No past analysis runs in session yet.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODEL REGISTRY MODAL -->
+  <div class="modal-backdrop" id="modal-models" role="dialog" aria-modal="true" aria-labelledby="modal-models-title">
+    <div class="modal-window">
+      <div class="modal-header">
+        <div class="modal-title" id="modal-models-title"><i data-lucide="cpu" aria-hidden="true"></i> Model & Tool
+          Registry</div>
+        <button class="modal-close" onclick="closeModal('modal-models')"
+          aria-label="Close model registry">&times;</button>
+      </div>
+      <div class="modal-body" id="models-modal-body">
+        <p>Loading registered remote-sensing models...</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ADAPTATION / DATASETS MODAL -->
+  <div class="modal-backdrop" id="modal-datasets" role="dialog" aria-modal="true"
+    aria-labelledby="modal-datasets-title">
+    <div class="modal-window">
+      <div class="modal-header">
+        <div class="modal-title" id="modal-datasets-title"><i data-lucide="database" aria-hidden="true"></i> Remote
+          Sensing Adaptation Datasets</div>
+        <button class="modal-close" onclick="closeModal('modal-datasets')"
+          aria-label="Close adaptation datasets">&times;</button>
+      </div>
+      <div class="modal-body">
+        <h3 style="color: var(--cyan); font-size: 14px;">Supported Fine-Tuning & Evaluation Benchmarks</h3>
+        <p style="font-size: 13px; color: var(--text-muted); line-height: 1.6;">
+          SatQuery AI's architecture features modular interfaces designed for zero-shot and fine-tuned remote-sensing
+          vision-language models. Models can be integrated across standard benchmarks:
+        </p>
+        <ul
+          style="margin-left: 20px; font-size: 12px; color: var(--text-main); display: flex; flex-direction: column; gap: 8px;">
+          <li><strong>BigEarthNet-MM:</strong> Multi-modal Sentinel-1 & Sentinel-2 land cover classification dataset
+            (590,326 image patch pairs).</li>
+          <li><strong>RSVQA:</strong> Remote Sensing Visual Question Answering benchmark for low-resolution and
+            high-resolution optical imagery.</li>
+          <li><strong>VRSBench:</strong> Comprehensive benchmark for visual reasoning, captioning, and grounded VQA in
+            satellite imagery.</li>
+          <li><strong>CDVQA:</strong> Change Detection Visual Question Answering benchmark for bi-temporal remote
+            sensing pairs.</li>
+        </ul>
+        <div
+          style="background: rgba(0, 240, 255, 0.08); border: 1px solid var(--border-color); padding: 12px; border-radius: 6px; font-family: var(--font-mono); font-size: 11px;">
+          Clean Python BaseRSModel abstract class enables seamless hot-swapping of PyTorch / ONNX model weights without
+          modifying UI components.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ABOUT MODAL -->
+  <div class="modal-backdrop" id="modal-about" role="dialog" aria-modal="true" aria-labelledby="modal-about-title">
+    <div class="modal-window">
+      <div class="modal-header">
+        <div class="modal-title" id="modal-about-title"><i data-lucide="info" aria-hidden="true"></i> About SatQuery AI
+        </div>
+        <button class="modal-close" onclick="closeModal('modal-about')" aria-label="Close about">&times;</button>
+      </div>
+      <div class="modal-body">
+        <h2 style="font-family: var(--font-heading); color: #fff; font-size: 18px;">SATQUERY AI</h2>
+        <div style="color: var(--emerald); font-family: var(--font-mono); font-size: 12px;">"Ask questions. Understand
+          Earth."</div>
+
+        <h4 style="color: var(--cyan); margin-top: 10px;">Product Principles</h4>
+        <p style="font-size: 13px; color: var(--text-muted); line-height: 1.6;">
+          SatQuery AI is an <strong>AI Agent platform for understanding and analyzing remote-sensing imagery</strong>.
+          It is NOT simply a generic image chatbot or satellite viewer.
+        </p>
+        <p style="font-size: 13px; color: var(--text-muted); line-height: 1.6;">
+          The system dynamically determines required remote sensing analysis (VQA, Grounding, Bi-Temporal Change
+          Detection, Optical-SAR Fusion), executes specialized models, overlays visual spatial evidence, and provides
+          auditable execution summaries.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <noscript>
+    <div style="padding: 24px; font-family: sans-serif; text-align: center;">
+      SatQuery AI requires JavaScript to run its analysis agent. Please enable JavaScript in your browser.
+    </div>
+  </noscript>
+
+  <script src="/static/app.js" defer></script>
+  <script>
+    // Initialize Lucide icons once both the icon library and DOM are ready
+    document.addEventListener('DOMContentLoaded', () => {
+      if (window.lucide) lucide.createIcons();
+    });
+  </script>
+
+  <script>
+    /* ================================================================
+       Result-panel visual bridge.
+       Does not replace app.js. It only mirrors existing result values
+       into the enhanced presentation layer when those values exist.
+       ================================================================ */
+    (function () {
+      function syncEnhancedResult() {
+        const confidenceText = document.getElementById('res-confidence');
+        const numberEl = document.getElementById('res-confidence-number');
+        const fillEl = document.getElementById('res-confidence-fill');
+        const labelEl = document.getElementById('res-confidence-label');
+        const noteEl = document.getElementById('res-confidence-note');
+
+        if (confidenceText) {
+          const match = confidenceText.textContent.match(/(\\d+(?:\\.\\d+)?)/);
+          if (match) {
+            const value = Math.max(0, Math.min(100, Number(match[1])));
+            if (numberEl) numberEl.textContent = String(Math.round(value));
+            if (fillEl) fillEl.style.width = value + '%';
+            if (labelEl) labelEl.textContent = value >= 90 ? 'VERY HIGH' : value >= 75 ? 'HIGH' : value >= 60 ? 'MODERATE' : 'LOW';
+            if (noteEl) noteEl.textContent = value >= 75 ? 'High confidence response' : 'Review evidence carefully';
+          }
+        }
+
+        if (window.lucide) window.lucide.createIcons();
+      }
+
+      document.addEventListener('DOMContentLoaded', syncEnhancedResult);
+      const observer = new MutationObserver(syncEnhancedResult);
+      observer.observe(document.body, { subtree: true, childList: true, characterData: true });
+    })();
+
+    // Export Intelligence Brief PDF Generator Function
+    function downloadIntelligenceBriefPDF() {
+      const headline = document.getElementById('res-headline')?.textContent || 'Satellite Intelligence Briefing';
+      const answer = document.getElementById('res-answer')?.textContent || 'Analysis report unavailable.';
+      const confidence = document.getElementById('res-confidence-number')?.textContent || '94';
+      const task = document.getElementById('audit-task')?.textContent || 'SINGLE_IMAGE_VQA';
+      const model = document.getElementById('audit-model')?.textContent || 'RS-VQA Transformer v2.4';
+      const timestamp = new Date().toLocaleString();
+
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) {
+        alert('Please allow popups to generate and print/download the PDF briefing.');
+        return;
+      }
+
+      printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>SatQuery AI - Intelligence Briefing</title>
+          <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 40px; color: #1e293b; background: #fff; line-height: 1.6; }
+            .header { border-bottom: 2px solid #0284c7; padding-bottom: 20px; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center; }
+            .title { font-size: 24px; font-weight: 800; color: #0f172a; margin: 0; }
+            .badge { background: #e0f2fe; color: #0369a1; font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 4px; }
+            .grid { display: grid; grid-template-columns: 2fr 1fr; gap: 24px; margin-bottom: 24px; }
+            .card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; }
+            .card-title { font-size: 12px; font-weight: 700; color: #64748b; text-transform: uppercase; margin-bottom: 12px; letter-spacing: 0.5px; }
+            .conf-score { font-size: 36px; font-weight: 900; color: #0284c7; }
+            .meta-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px dashed #cbd5e1; font-size: 13px; }
+            .footer { font-size: 11px; color: #94a3b8; border-top: 1px solid #e2e8f0; margin-top: 40px; padding-top: 16px; text-align: center; }
+            @media print {
+              body { padding: 0; }
+              .no-print { display: none; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div>
+              <h1 class="title">SATQUERY AI — MISSION INTELLIGENCE BRIEF</h1>
+              <div style="font-size: 12px; color: #64748b; margin-top: 4px;">Generated: ${timestamp}</div>
+            </div>
+            <span class="badge">VERIFIED EVIDENTIARY AUDIT</span>
+          </div>
+
+          <div class="grid">
+            <div class="card">
+              <div class="card-title">Executive Summary</div>
+              <h2 style="font-size: 18px; margin-top: 0; color: #0f172a;">${headline}</h2>
+              <p style="white-space: pre-wrap; font-size: 14px; color: #334155;">${answer}</p>
+            </div>
+
+            <div>
+              <div class="card" style="margin-bottom: 16px; text-align: center;">
+                <div class="card-title">Model Confidence Score</div>
+                <div class="conf-score">${confidence}<span style="font-size: 18px; color: #64748b;">/100</span></div>
+                <div style="font-size: 12px; color: #16a34a; font-weight: 600; margin-top: 4px;">VERIFIED CERTAINTY</div>
+              </div>
+
+              <div class="card">
+                <div class="card-title">Audit Metadata</div>
+                <div class="meta-row"><span>Task Type:</span> <strong>${task}</strong></div>
+                <div class="meta-row"><span>AI Model:</span> <strong>${model}</strong></div>
+                <div class="meta-row"><span>Security Level:</span> <strong>UNCLASSIFIED // OPEN GIS</strong></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="footer">
+            SatQuery AI Remote-Sensing Analysis Platform • Confidential Evidentiary Report
+          </div>
+
+          <script>
+            window.onload = function() {
+              window.print();
+            };
+          <\/script>
+        </body>
+        </html>
+      `);
+      printWindow.document.close();
+    }
+  </script>
+
+</body>
+
+</html>

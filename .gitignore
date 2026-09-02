@@ -1,0 +1,26 @@
+# Node / React
+node_modules/
+frontend/node_modules/
+frontend/dist/
+*.log
+npm-debug.log*
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+ENV/
+env/
+
+# Environment Variables & IDE
+.env
+.env.local
+.vscode/
+.idea/
+
+# OS Files
+.DS_Store
+Thumbs.db
