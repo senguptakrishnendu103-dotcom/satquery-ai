@@ -588,8 +588,10 @@ export const QueryInterface: React.FC<
       setBuilderOpen(null);
 
       window.setTimeout(() => {
-        textareaRef.current?.focus();
-      }, 0);
+        if (generated.trim() && !isAnalyzing) {
+          onExecuteQuery(generated.trim());
+        }
+      }, 50);
     };
 
     /* ==============================================================
@@ -1081,6 +1083,47 @@ export const QueryInterface: React.FC<
                 </div>
               )}
             </div>
+
+            {/* Execute Query Action Button */}
+            <button
+              type="submit"
+              disabled={isAnalyzing || !queryText.trim()}
+              className="
+                flex
+                w-full
+                items-center
+                justify-center
+                gap-2
+                rounded-lg
+                border border-sat-accent/60
+                bg-sat-accent/20
+                px-4 py-2.5
+                font-mono
+                text-xs
+                font-bold
+                uppercase
+                tracking-wider
+                text-sat-accent
+                shadow-lg shadow-sat-accent/10
+                transition-all
+                hover:bg-sat-accent/30
+                active:scale-[0.98]
+                disabled:opacity-40
+                disabled:cursor-not-allowed
+              "
+            >
+              {isAnalyzing ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  ANALYZING SATELLITE SCENE...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="h-4 w-4" />
+                  EXECUTE AI ANALYSIS
+                </>
+              )}
+            </button>
 
             {/* Interim transcript */}
             {isListening &&
