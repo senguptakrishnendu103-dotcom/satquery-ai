@@ -91,8 +91,8 @@ export const SatelliteSearchModal: React.FC<SatelliteSearchModalProps> = ({
 }) => {
   const [selectedPreset, setSelectedPreset] = useState<LocationPreset>(LOCATION_PRESETS[0]);
   const [collection, setCollection] = useState<string>('sentinel-2-l2a');
-  const [startDate, setStartDate] = useState<string>('2026-01-01');
-  const [endDate, setEndDate] = useState<string>('2026-03-04');
+  const [startDate, setStartDate] = useState<string>('2024-01-01');
+  const [endDate, setEndDate] = useState<string>('2024-12-31');
   const [maxCloud, setMaxCloud] = useState<number>(20);
   const [isSearching, setIsSearching] = useState<boolean>(false);
   const [results, setResults] = useState<any[]>(MOCK_PRODUCTS);
@@ -270,9 +270,10 @@ export const SatelliteSearchModal: React.FC<SatelliteSearchModalProps> = ({
 
             {/* Search Submit */}
             <button
+              type="button"
               onClick={handleSearch}
               disabled={isSearching}
-              className="w-full flex items-center justify-center gap-2 rounded-xl bg-sat-accent py-3 text-xs font-bold text-slate-950 hover:bg-sat-accent/90 disabled:opacity-50 transition-all shadow-lg shadow-sat-accent/20"
+              className="w-full flex items-center justify-center gap-2 rounded-xl bg-sat-accent py-3 text-xs font-bold text-slate-950 hover:bg-sat-accent/90 disabled:opacity-50 transition-all shadow-lg shadow-sat-accent/20 cursor-pointer"
             >
               {isSearching ? (
                 <>
