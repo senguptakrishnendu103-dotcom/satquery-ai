@@ -360,8 +360,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnterWorkspace, onVi
               onClick={onViewDemo}
               className="px-8 py-3 rounded-full border border-sat-borderLight text-sat-text font-mono text-xs font-semibold tracking-wider uppercase flex items-center justify-center space-x-2 hover:border-sat-accent hover:text-sat-accent transition-all cursor-pointer bg-sat-surface/40 hover:bg-sat-surface shadow-md"
             >
-              <Sparkles className="w-3.5 h-3.5 text-sat-accent fill-sat-accent/20" />
-              <span>PRESET DEMOS</span>
+              <Play className="w-3.5 h-3.5 fill-current" />
+              <span>read demo</span>
             </button>
 
             {/* Pill Primary CTA Button */}
