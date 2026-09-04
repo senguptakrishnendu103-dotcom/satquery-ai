@@ -2,16 +2,14 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   Check,
   CheckCircle2,
-  ChevronRight,
-  Cpu,
-  Database,
   Loader2,
   Radar,
   Satellite,
-  Shield,
   Sparkles,
-  Activity,
+  Database,
   Crosshair,
+  Cpu,
+  Activity,
 } from 'lucide-react';
 
 interface AnalysisStatusModalProps {
@@ -40,15 +38,31 @@ const STEP_ICONS = [
   CheckCircle2,
 ];
 
+const FRIENDLY_STEP_LABELS = [
+  'Understanding what you asked',
+  'Checking your satellite data',
+  'Choosing the right analysis',
+  'Choosing the best AI model',
+  'Analyzing the satellite data',
+  'Checking the evidence',
+  'Getting your answer ready',
+];
+
+const FRIENDLY_STEP_DESCRIPTIONS = [
+  'Turning your question into an analysis plan.',
+  'Making sure the right observations are available.',
+  'Figuring out what kind of analysis will answer your question.',
+  'Selecting the specialist model that fits the task.',
+  'Processing the satellite information now.',
+  'Checking the result against available evidence.',
+  'Putting everything into a clear result for you.',
+];
+
 export const AnalysisStatusModal: React.FC<AnalysisStatusModalProps> = ({
   currentStepIndex,
   currentStepLabel,
   queryText,
 }) => {
-  const [executionId] = useState(
-    () => `SQ-${Math.random().toString(36).slice(2, 8).toUpperCase()}`
-  );
-
   const [elapsed, setElapsed] = useState(0);
 
   useEffect(() => {
@@ -66,16 +80,17 @@ export const AnalysisStatusModal: React.FC<AnalysisStatusModalProps> = ({
 
     return Math.min(
       100,
-      Math.round(
-        ((currentStepIndex + 1) / ANALYSIS_STEPS.length) * 100
-      )
+      Math.round(((currentStepIndex + 1) / ANALYSIS_STEPS.length) * 100)
     );
   }, [currentStepIndex]);
 
   const activeStep =
     currentStepLabel ||
     ANALYSIS_STEPS[currentStepIndex] ||
-    'SATQUERY AGENT ORCHESTRATION';
+    'Preparing your analysis';
+
+  const friendlyActiveStep =
+    FRIENDLY_STEP_LABELS[currentStepIndex] || activeStep;
 
   const elapsedSeconds = (elapsed / 1000).toFixed(1);
 
@@ -84,278 +99,139 @@ export const AnalysisStatusModal: React.FC<AnalysisStatusModalProps> = ({
       className="
         fixed inset-0 z-50
         flex items-center justify-center
-        bg-slate-950/85
-        backdrop-blur-md
+        bg-slate-950/80
         p-4
+        backdrop-blur-sm
       "
       role="dialog"
       aria-modal="true"
       aria-labelledby="satquery-analysis-title"
+      aria-describedby="satquery-analysis-description"
     >
-      {/* Ambient instrument glow */}
       <div
         className="
-          pointer-events-none
-          absolute
-          h-[520px]
-          w-[520px]
-          rounded-full
-          border border-sat-accent/10
-          opacity-60
-          animate-pulse
-        "
-      />
-
-      <div
-        className="
-          relative
-          w-full
-          max-w-2xl
-          overflow-hidden
-          rounded-xl
-          border border-sat-borderLight
+          relative w-full max-w-xl overflow-hidden
+          rounded-2xl border border-sat-borderLight
           bg-sat-surface
           shadow-[0_30px_100px_rgba(0,0,0,0.55)]
         "
       >
-        {/* =========================================================
-            TOP INSTRUMENT BAR
-        ========================================================= */}
-
-        <div
-          className="
-            relative
-            border-b border-sat-border
-            bg-sat-panel/80
-          "
-        >
-          {/* Fine scanline */}
+        {/* Simple visual progress indicator */}
+        <div className="h-1 bg-sat-bg">
           <div
-            className="
-              pointer-events-none
-              absolute inset-0
-              opacity-[0.035]
-              bg-[linear-gradient(to_bottom,transparent_50%,currentColor_50%)]
-              bg-[length:100%_4px]
-            "
+            className="h-full bg-sat-accent transition-all duration-500"
+            style={{ width: `${progress}%` }}
           />
-
-          <div className="relative px-6 py-5">
-            <div className="flex items-start justify-between gap-5">
-              <div className="flex items-center gap-4">
-                {/* Radar core */}
-                <div
-                  className="
-                    relative
-                    flex h-12 w-12 shrink-0
-                    items-center justify-center
-                    overflow-hidden
-                    rounded-lg
-                    border border-sat-accent/40
-                    bg-sat-bg
-                    text-sat-accent
-                  "
-                >
-                  <div
-                    className="
-                      absolute inset-1
-                      rounded-full
-                      border border-sat-accent/20
-                    "
-                  />
-
-                  <div
-                    className="
-                      absolute
-                      h-full w-px
-                      bg-sat-accent/40
-                      origin-bottom
-                      animate-spin
-                    "
-                    style={{
-                      animationDuration: '3.5s',
-                    }}
-                  />
-
-                  <Radar className="relative z-10 h-6 w-6" />
-                </div>
-
-                <div>
-                  <div className="flex items-center gap-2">
-                    <Satellite className="h-3.5 w-3.5 text-sat-accent" />
-
-                    <h3
-                      id="satquery-analysis-title"
-                      className="
-                        font-mono
-                        text-xs
-                        font-bold
-                        tracking-[0.16em]
-                        text-slate-100
-                      "
-                    >
-                      SATQUERY ENGINE
-                    </h3>
-                  </div>
-
-                  <p
-                    className="
-                      mt-1
-                      font-mono
-                      text-[10px]
-                      uppercase
-                      tracking-[0.12em]
-                      text-sat-accent
-                    "
-                    aria-live="polite"
-                  >
-                    {activeStep}
-                  </p>
-                </div>
-              </div>
-
-              {/* Execution identifier */}
-              <div className="hidden text-right sm:block">
-                <div className="font-mono text-[9px] uppercase tracking-widest text-sat-dim">
-                  Execution
-                </div>
-
-                <div className="mt-1 font-mono text-[10px] font-semibold text-slate-300">
-                  {executionId}
-                </div>
-
-                <div className="mt-1 font-mono text-[9px] text-sat-dim">
-                  {elapsedSeconds}s elapsed
-                </div>
-              </div>
-            </div>
-
-            {/* Progress telemetry */}
-            <div className="mt-5">
-              <div className="mb-2 flex items-center justify-between">
-                <span className="font-mono text-[9px] uppercase tracking-widest text-sat-dim">
-                  Analysis progression
-                </span>
-
-                <span className="font-mono text-[10px] font-bold text-sat-accent">
-                  {progress}%
-                </span>
-              </div>
-
-              <div
-                className="
-                  h-1
-                  overflow-hidden
-                  rounded-full
-                  bg-sat-bg
-                "
-              >
-                <div
-                  className="
-                    h-full
-                    rounded-full
-                    bg-sat-accent
-                    shadow-[0_0_12px_rgba(56,189,248,0.55)]
-                    transition-all
-                    duration-500
-                  "
-                  style={{
-                    width: `${progress}%`,
-                  }}
-                />
-              </div>
-            </div>
-          </div>
         </div>
 
-        {/* =========================================================
-            QUERY / OBSERVATION TARGET
-        ========================================================= */}
-
-        <div className="px-6 pt-5">
-          <div
-            className="
-              overflow-hidden
-              rounded-lg
-              border border-sat-border
-              bg-sat-bg
-            "
-          >
-            {/* Target header */}
+        {/* Header */}
+        <div className="px-6 pb-5 pt-6">
+          <div className="flex items-start gap-4">
             <div
               className="
-                flex items-center justify-between
-                border-b border-sat-border
-                px-4 py-2.5
+                flex h-12 w-12 shrink-0 items-center justify-center
+                rounded-xl border border-sat-accent/30
+                bg-sat-accent/10 text-sat-accent
               "
             >
-              <div className="flex items-center gap-2">
-                <Crosshair className="h-3.5 w-3.5 text-sat-accent" />
-
-                <span
-                  className="
-                    font-mono
-                    text-[9px]
-                    font-bold
-                    uppercase
-                    tracking-[0.14em]
-                    text-sat-dim
-                  "
-                >
-                  Target question
-                </span>
-              </div>
-
-              <span className="font-mono text-[9px] text-sat-dim">
-                NATURAL LANGUAGE
-              </span>
+              <Radar className="h-6 w-6" />
             </div>
 
-            <div className="px-4 py-3">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <Satellite className="h-4 w-4 text-sat-accent" />
+                <h3
+                  id="satquery-analysis-title"
+                  className="text-base font-semibold text-slate-100"
+                >
+                  Analyzing your satellite data
+                </h3>
+              </div>
+
               <p
-                className="
-                  font-sans
-                  text-sm
-                  font-medium
-                  leading-relaxed
-                  text-slate-200
-                "
+                id="satquery-analysis-description"
+                className="mt-1.5 text-sm leading-relaxed text-slate-400"
+                aria-live="polite"
               >
-                "{queryText}"
+                {friendlyActiveStep}. You don't need to do anything while we
+                work.
               </p>
             </div>
           </div>
-        </div>
 
-        {/* =========================================================
-            AGENT PIPELINE
-        ========================================================= */}
-
-        <div className="px-6 py-5">
-          <div className="mb-3 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Cpu className="h-3.5 w-3.5 text-sat-accent" />
-
-              <span
-                className="
-                  font-mono
-                  text-[9px]
-                  font-bold
-                  uppercase
-                  tracking-[0.14em]
-                  text-sat-dim
-                "
-              >
-                Agent execution pipeline
+          {/* Progress summary */}
+          <div className="mt-6">
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-xs font-medium text-slate-400">
+                Progress
+              </span>
+              <span className="text-sm font-semibold text-sat-accent">
+                {progress}%
               </span>
             </div>
 
-            <span className="font-mono text-[9px] text-sat-dim">
-              {currentStepIndex + 1}/{ANALYSIS_STEPS.length}
+            <div
+              className="h-2 overflow-hidden rounded-full bg-sat-bg"
+              aria-label={`Analysis progress: ${progress}%`}
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={progress}
+            >
+              <div
+                className="
+                  h-full rounded-full bg-sat-accent
+                  transition-all duration-500
+                "
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+
+            <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
+              <span>
+                Step {Math.min(Math.max(currentStepIndex + 1, 0), ANALYSIS_STEPS.length)} of{' '}
+                {ANALYSIS_STEPS.length}
+              </span>
+              <span>{elapsedSeconds}s</span>
+            </div>
+          </div>
+        </div>
+
+        {/* What the user asked */}
+        <div className="px-6">
+          <div
+            className="
+              rounded-xl border border-sat-border
+              bg-sat-bg/60
+              px-4 py-4
+            "
+          >
+            <div className="mb-2 flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-sat-accent" />
+              <span className="text-xs font-semibold text-slate-300">
+                Your question
+              </span>
+            </div>
+
+            <p className="text-sm leading-relaxed text-slate-200">
+              “{queryText}”
+            </p>
+          </div>
+        </div>
+
+        {/* Friendly step list */}
+        <div className="px-6 py-5">
+          <div className="mb-3 flex items-center justify-between">
+            <h4 className="text-sm font-semibold text-slate-200">
+              What SATQuery is doing
+            </h4>
+
+            <span className="text-xs text-slate-500">
+              {progress === 100 ? 'Almost done' : 'Working automatically'}
             </span>
           </div>
 
-          <div className="space-y-1">
+          <div className="space-y-2">
             {ANALYSIS_STEPS.map((step, idx) => {
               const isDone = idx < currentStepIndex;
               const isCurrent = idx === currentStepIndex;
@@ -367,51 +243,20 @@ export const AnalysisStatusModal: React.FC<AnalysisStatusModalProps> = ({
                 <div
                   key={step}
                   className={`
-                    group
-                    relative
-                    flex
-                    items-center
-                    gap-3
-                    rounded-lg
-                    border
-                    px-3
-                    py-2.5
-                    transition-all
-                    duration-300
-
+                    flex items-center gap-3 rounded-xl border px-3 py-3
+                    transition-all duration-300
                     ${isCurrent
-                      ? `
-                          border-sat-accent/40
-                          bg-sat-accent/[0.07]
-                          shadow-[inset_3px_0_0_rgba(56,189,248,0.7)]
-                        `
+                      ? 'border-sat-accent/30 bg-sat-accent/[0.07]'
                       : isDone
-                        ? `
-                          border-transparent
-                          bg-sat-stable/[0.025]
-                        `
-                        : `
-                          border-transparent
-                          opacity-40
-                        `
+                        ? 'border-sat-stable/10 bg-sat-stable/[0.025]'
+                        : 'border-sat-border/40 bg-transparent opacity-55'
                     }
                   `}
                 >
-                  {/* Step number */}
                   <div
                     className={`
-                      flex
-                      h-7
-                      w-7
-                      shrink-0
-                      items-center
-                      justify-center
-                      rounded-md
-                      border
-                      font-mono
-                      text-[9px]
-                      font-bold
-
+                      flex h-8 w-8 shrink-0 items-center justify-center
+                      rounded-full border
                       ${isCurrent
                         ? 'border-sat-accent/40 bg-sat-accent/10 text-sat-accent'
                         : isDone
@@ -421,54 +266,34 @@ export const AnalysisStatusModal: React.FC<AnalysisStatusModalProps> = ({
                     `}
                   >
                     {isDone ? (
-                      <Check className="h-3.5 w-3.5" />
+                      <Check className="h-4 w-4" />
                     ) : (
-                      <span>{String(idx + 1).padStart(2, '0')}</span>
+                      <Icon className="h-4 w-4" />
                     )}
                   </div>
 
-                  {/* Icon */}
-                  <Icon
-                    className={`
-                      h-3.5
-                      w-3.5
-                      shrink-0
-
-                      ${isCurrent
-                        ? 'text-sat-accent'
-                        : isDone
-                          ? 'text-sat-stable'
-                          : 'text-sat-dim'
-                      }
-                    `}
-                  />
-
-                  {/* Step text */}
                   <div className="min-w-0 flex-1">
                     <div
                       className={`
-                        font-mono
-                        text-[11px]
-
+                        text-sm
                         ${isCurrent
-                          ? 'font-bold text-slate-100'
+                          ? 'font-semibold text-slate-100'
                           : isDone
                             ? 'text-slate-300'
-                            : 'text-sat-dim'
+                            : 'text-slate-500'
                         }
                       `}
                     >
-                      {step}
+                      {FRIENDLY_STEP_LABELS[idx]}
                     </div>
 
-                    {isCurrent && (
-                      <div className="mt-0.5 font-mono text-[8px] uppercase tracking-wider text-sat-accent/70">
-                        Specialist operation active
+                    {(isCurrent || isDone) && (
+                      <div className="mt-0.5 text-xs leading-relaxed text-slate-500">
+                        {FRIENDLY_STEP_DESCRIPTIONS[idx]}
                       </div>
                     )}
                   </div>
 
-                  {/* Status */}
                   <div className="shrink-0">
                     {isDone && (
                       <CheckCircle2 className="h-4 w-4 text-sat-stable" />
@@ -479,7 +304,7 @@ export const AnalysisStatusModal: React.FC<AnalysisStatusModalProps> = ({
                     )}
 
                     {isPending && (
-                      <ChevronRight className="h-3.5 w-3.5 text-sat-dim" />
+                      <div className="h-2 w-2 rounded-full bg-slate-600" />
                     )}
                   </div>
                 </div>
@@ -488,144 +313,20 @@ export const AnalysisStatusModal: React.FC<AnalysisStatusModalProps> = ({
           </div>
         </div>
 
-        {/* =========================================================
-            SYSTEM TELEMETRY
-        ========================================================= */}
-
+        {/* Small reassuring footer */}
         <div
           className="
             border-t border-sat-border
-            bg-sat-panel/40
-            px-6
-            py-4
+            bg-sat-panel/30
+            px-6 py-4
           "
         >
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <TelemetryItem
-              label="ENGINE"
-              value="ONLINE"
-              icon={<Activity className="h-3 w-3" />}
-              accent="stable"
-            />
-
-            <TelemetryItem
-              label="AGENT"
-              value="ACTIVE"
-              icon={<Cpu className="h-3 w-3" />}
-              accent="accent"
-            />
-
-            <TelemetryItem
-              label="EVIDENCE"
-              value={currentStepIndex >= 5 ? 'READY' : 'BUILDING'}
-              icon={<Radar className="h-3 w-3" />}
-              accent={currentStepIndex >= 5 ? 'stable' : 'accent'}
-            />
-
-            <TelemetryItem
-              label="AUDIT"
-              value="ENABLED"
-              icon={<Shield className="h-3 w-3" />}
-              accent="stable"
-            />
-          </div>
-        </div>
-
-        {/* =========================================================
-            FOOTER
-        ========================================================= */}
-
-        <div
-          className="
-            flex
-            flex-col
-            gap-2
-            border-t border-sat-border
-            px-6
-            py-3
-            sm:flex-row
-            sm:items-center
-            sm:justify-between
-          "
-        >
-          <div className="flex items-center gap-2">
-            <Shield className="h-3 w-3 text-sat-stable" />
-
-            <span
-              className="
-                font-mono
-                text-[9px]
-                uppercase
-                tracking-wider
-                text-sat-dim
-              "
-            >
-              Auditable satellite intelligence
+          <div className="flex items-center justify-center gap-2 text-xs text-slate-500">
+            <Activity className="h-3.5 w-3.5 text-sat-stable" />
+            <span>
+              SATQuery is handling the technical processing automatically.
             </span>
           </div>
-
-          <div className="font-mono text-[9px] text-sat-dim">
-            COMPUTE EST. · 0.04 GPU-HRS
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-/* =============================================================
-   TELEMETRY COMPONENT
-============================================================= */
-
-interface TelemetryItemProps {
-  label: string;
-  value: string;
-  icon: React.ReactNode;
-  accent: 'stable' | 'accent';
-}
-
-const TelemetryItem: React.FC<TelemetryItemProps> = ({
-  label,
-  value,
-  icon,
-  accent,
-}) => {
-  const accentClass =
-    accent === 'stable'
-      ? 'text-sat-stable'
-      : 'text-sat-accent';
-
-  return (
-    <div
-      className="
-        flex
-        min-w-0
-        items-center
-        gap-2
-        rounded-md
-        border border-sat-border
-        bg-sat-bg/60
-        px-2.5
-        py-2
-      "
-    >
-      <span className={accentClass}>{icon}</span>
-
-      <div className="min-w-0">
-        <div className="truncate font-mono text-[8px] text-sat-dim">
-          {label}
-        </div>
-
-        <div
-          className={`
-            truncate
-            font-mono
-            text-[9px]
-            font-bold
-            ${accentClass}
-          `}
-        >
-          {value}
         </div>
       </div>
     </div>

@@ -20,7 +20,6 @@ import {
   Loader2,
   Mic,
   MicOff,
-  Send,
   Sparkles,
   Terminal,
   WandSparkles,
@@ -151,10 +150,10 @@ export const QueryInterface: React.FC<
       useState<string>('');
 
     const [showBuilder, setShowBuilder] =
-      useState<boolean>(true);
+      useState<boolean>(false);
 
     const [showRoutingDetails, setShowRoutingDetails] =
-      useState<boolean>(true);
+      useState<boolean>(false);
 
     const [isListening, setIsListening] =
       useState<boolean>(false);
@@ -603,10 +602,15 @@ export const QueryInterface: React.FC<
     ) => {
       event.preventDefault();
 
-      const cleanQuery =
-        queryText.trim();
+      let cleanQuery = queryText.trim();
+      if (!cleanQuery) {
+        cleanQuery = isMultiObs
+          ? "What changed between these satellite observations?"
+          : "Describe this satellite observation and detect key features";
+        setQueryText(cleanQuery);
+      }
 
-      if (!cleanQuery || isAnalyzing) {
+      if (isAnalyzing) {
         return;
       }
 
@@ -739,7 +743,7 @@ export const QueryInterface: React.FC<
                     className="
                     truncate
                     font-display
-                    text-sm
+                    text-base
                     font-bold
                     uppercase
                     tracking-[0.12em]
@@ -754,9 +758,9 @@ export const QueryInterface: React.FC<
                     rounded-full
                     border border-sat-stable/30
                     bg-sat-stable/10
-                    px-1.5 py-0.5
+                    px-2 py-0.5
                     font-mono
-                    text-[7px]
+                    text-xs
                     font-bold
                     tracking-wider
                     text-sat-stable
@@ -770,7 +774,7 @@ export const QueryInterface: React.FC<
                   className="
                   mt-0.5
                   font-mono
-                  text-[8px]
+                  text-xs
                   uppercase
                   tracking-wider
                   text-sat-dim
@@ -817,13 +821,12 @@ export const QueryInterface: React.FC<
                 rounded
                 border border-sat-stable/20
                 bg-sat-stable/10
-                px-2
-                py-1
+                px-2 py-1
               "
               >
                 <span className="h-1.5 w-1.5 rounded-full bg-sat-stable" />
 
-                <span className="font-mono text-[7px] font-bold uppercase tracking-wider text-sat-stable">
+                <span className="font-mono text-xs font-bold uppercase tracking-wider text-sat-stable">
                   READY
                 </span>
               </div>
@@ -853,7 +856,7 @@ export const QueryInterface: React.FC<
                 px-3 py-2
               "
               >
-                <span className="font-mono text-[8px] font-bold uppercase tracking-wider text-sat-dim">
+                <span className="font-mono text-xs font-bold uppercase tracking-wider text-sat-dim">
                   Recent queries
                 </span>
 
@@ -885,7 +888,7 @@ export const QueryInterface: React.FC<
                       px-3 py-2
                       text-left
                       font-sans
-                      text-[9px]
+                      text-xs
                       text-sat-muted
                       transition-colors
                       hover:bg-sat-panel
@@ -920,14 +923,14 @@ export const QueryInterface: React.FC<
             {/* Context line */}
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-1.5">
-                <Activity className="h-3 w-3 text-sat-accent" />
+                <Activity className="h-3.5 w-3.5 text-sat-accent" />
 
-                <span className="font-mono text-[8px] font-bold uppercase tracking-wider text-sat-dim">
+                <span className="font-mono text-xs font-bold uppercase tracking-wider text-sat-dim">
                   QUERY INPUT
                 </span>
               </div>
 
-              <span className="font-mono text-[7px] uppercase tracking-wider text-sat-dim">
+              <span className="font-mono text-xs uppercase tracking-wider text-sat-dim">
                 {activeObsList.length}{' '}
                 OBSERVATION
                 {activeObsList.length === 1
@@ -974,11 +977,11 @@ export const QueryInterface: React.FC<
                 w-full
                 resize-none
                 bg-transparent
-                px-3
+                px-3.5
                 pb-11
-                pt-3
+                pt-3.5
                 font-sans
-                text-xs
+                text-sm
                 leading-relaxed
                 text-sat-text
                 outline-none
@@ -993,10 +996,11 @@ export const QueryInterface: React.FC<
                 className="
                 pointer-events-none
                 absolute
-                bottom-2
-                left-3
+                bottom-2.5
+                left-3.5
                 font-mono
-                text-[7px]
+                text-xs
+                font-medium
                 text-sat-dim
               "
               >
@@ -1069,13 +1073,13 @@ export const QueryInterface: React.FC<
                   rounded-full
                   border border-sat-change/20
                   bg-sat-change/10
-                  px-2
+                  px-2.5
                   py-1
                 "
                 >
-                  <AudioLines className="h-3 w-3 text-sat-change" />
+                  <AudioLines className="h-3.5 w-3.5 text-sat-change" />
 
-                  <span className="font-mono text-[7px] font-bold uppercase tracking-wider text-sat-change">
+                  <span className="font-mono text-xs font-bold uppercase tracking-wider text-sat-change">
                     LISTENING
                   </span>
 
@@ -1087,19 +1091,19 @@ export const QueryInterface: React.FC<
             {/* Execute Query Action Button */}
             <button
               type="submit"
-              disabled={isAnalyzing || !queryText.trim()}
+              disabled={isAnalyzing}
               className="
                 flex
                 w-full
                 items-center
                 justify-center
-                gap-2
+                gap-2.5
                 rounded-lg
                 border border-sat-accent/60
                 bg-sat-accent/20
-                px-4 py-2.5
+                px-4 py-3
                 font-mono
-                text-xs
+                text-sm
                 font-bold
                 uppercase
                 tracking-wider
@@ -1114,16 +1118,24 @@ export const QueryInterface: React.FC<
             >
               {isAnalyzing ? (
                 <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <Loader2 className="h-4.5 w-4.5 animate-spin" />
                   ANALYZING SATELLITE SCENE...
                 </>
               ) : (
                 <>
-                  <Sparkles className="h-4 w-4" />
+                  <Sparkles className="h-4.5 w-4.5" />
                   EXECUTE AI ANALYSIS
                 </>
               )}
             </button>
+
+            <div className="flex items-center justify-center gap-1.5 py-1">
+              <CornerDownLeft className="h-3.5 w-3.5 text-sat-dim" />
+
+              <span className="font-mono text-xs font-semibold uppercase tracking-wider text-sat-dim">
+                CTRL + ENTER TO RUN
+              </span>
+            </div>
 
             {/* Interim transcript */}
             {isListening &&
@@ -1136,11 +1148,11 @@ export const QueryInterface: React.FC<
                   px-3 py-2
                 "
                 >
-                  <div className="font-mono text-[7px] uppercase tracking-wider text-sat-dim">
+                  <div className="font-mono text-xs font-bold uppercase tracking-wider text-sat-dim">
                     LIVE TRANSCRIPT
                   </div>
 
-                  <div className="mt-1 font-sans text-[10px] italic text-sat-muted">
+                  <div className="mt-1 font-sans text-xs italic text-sat-muted">
                     {interimTranscript}
                   </div>
                 </div>
@@ -1170,14 +1182,14 @@ export const QueryInterface: React.FC<
                 w-full
                 items-center
                 justify-between
-                px-3 py-2.5
+                px-3.5 py-3
                 text-left
               "
               >
                 <div className="flex items-center gap-2">
-                  <WandSparkles className="h-3 w-3 text-sat-accent" />
+                  <WandSparkles className="h-3.5 w-3.5 text-sat-accent" />
 
-                  <span className="font-mono text-[8px] font-bold uppercase tracking-wider text-sat-text">
+                  <span className="font-mono text-xs font-bold uppercase tracking-wider text-sat-text">
                     Guided Query Builder
                   </span>
                 </div>
@@ -1341,22 +1353,11 @@ export const QueryInterface: React.FC<
                   <Zap className="h-3 w-3 text-sat-accent" />
 
                   <span className="font-mono text-[8px] font-bold uppercase tracking-wider text-sat-accent">
-                    Agent Routing
+                    Likely Routing (preview)
                   </span>
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <span
-                    className={`
-                    font-mono
-                    text-[7px]
-                    font-bold
-                    ${routingAccent}
-                  `}
-                  >
-                    {routingPrediction.confidence}%
-                  </span>
-
                   <ChevronDown
                     className={`
                     h-3 w-3
@@ -1380,6 +1381,10 @@ export const QueryInterface: React.FC<
                   pt-2.5
                 "
                 >
+                  <div className="mb-2.5 rounded border border-sat-border bg-sat-bg px-2.5 py-2 font-sans text-[8px] leading-relaxed text-sat-dim">
+                    This is a preview of how your question is likely to be handled — the agent may choose differently once it actually runs.
+                  </div>
+
                   <div className="flex items-start gap-3">
                     <div
                       className="
@@ -1398,7 +1403,7 @@ export const QueryInterface: React.FC<
                     </div>
 
                     <div className="min-w-0 flex-1">
-                      <div className="font-mono text-[7px] uppercase tracking-wider text-sat-dim">
+                      <div className="font-mono text-[9px] uppercase tracking-wider text-sat-dim">
                         TASK IDENTIFIED
                       </div>
 
@@ -1414,7 +1419,7 @@ export const QueryInterface: React.FC<
                         {routingPrediction.task}
                       </div>
 
-                      <div className="mt-2 font-mono text-[7px] uppercase tracking-wider text-sat-dim">
+                      <div className="mt-2 font-mono text-[9px] uppercase tracking-wider text-sat-dim">
                         SPECIALIST
                       </div>
 
@@ -1444,7 +1449,7 @@ export const QueryInterface: React.FC<
                     </span>
                   </div>
 
-                  <div className="mt-2 flex items-center justify-between font-mono text-[7px]">
+                  <div className="mt-2 flex items-center justify-between font-mono text-[9px]">
                     <span className="text-sat-dim">
                       INPUTS
                     </span>
@@ -1480,69 +1485,6 @@ export const QueryInterface: React.FC<
               }
             />
 
-            {/* ======================================================
-              ACTION BAR
-          ====================================================== */}
-
-            <div className="flex items-center justify-between gap-3 pt-1">
-              <div className="flex items-center gap-1.5">
-                <CornerDownLeft className="h-3 w-3 text-sat-dim" />
-
-                <span className="font-mono text-[7px] uppercase tracking-wider text-sat-dim">
-                  CTRL + ENTER TO RUN
-                </span>
-              </div>
-
-              <button
-                type="submit"
-                disabled={
-                  !queryText.trim() ||
-                  isAnalyzing
-                }
-                className={`
-                flex
-                items-center
-                gap-2
-                rounded-md
-                px-4
-                py-2.5
-                font-mono
-                text-[9px]
-                font-bold
-                uppercase
-                tracking-wider
-                transition-all
-                ${queryText.trim() &&
-                    !isAnalyzing
-                    ? `
-                      bg-sat-accent
-                      text-slate-950
-                      shadow-md
-                      shadow-sat-accent/20
-                      hover:bg-sky-300
-                    `
-                    : `
-                      cursor-not-allowed
-                      border border-sat-border
-                      bg-sat-panel
-                      text-sat-dim
-                    `
-                  }
-              `}
-              >
-                {isAnalyzing ? (
-                  <>
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    ANALYZING
-                  </>
-                ) : (
-                  <>
-                    RUN ANALYSIS
-                    <Send className="h-3.5 w-3.5" />
-                  </>
-                )}
-              </button>
-            </div>
           </form>
         </div>
 
@@ -1576,7 +1518,7 @@ export const QueryInterface: React.FC<
               </span>
             </div>
 
-            <span className="font-mono text-[7px] uppercase tracking-wider text-sat-dim">
+            <span className="font-mono text-[9px] uppercase tracking-wider text-sat-dim">
               CONTEXT AWARE
             </span>
           </div>
@@ -1624,7 +1566,7 @@ export const QueryInterface: React.FC<
                       rounded
                       border border-sat-border
                       font-mono
-                      text-[6px]
+                      text-[8px]
                       text-sat-dim
                       transition-colors
                       group-hover:border-sat-accent
@@ -1646,7 +1588,7 @@ export const QueryInterface: React.FC<
                     className="
                     shrink-0
                     font-mono
-                    text-[7px]
+                    text-[9px]
                     font-bold
                     uppercase
                     tracking-wider
@@ -1730,7 +1672,7 @@ export const QueryInterface: React.FC<
           bg-sat-bg
           p-3
           font-mono
-          text-[7px]
+          text-[9px]
         "
         >
           <div className="flex items-center justify-between">
@@ -1813,7 +1755,7 @@ const BuilderSelector: React.FC<
         "
         >
           <div className="min-w-0">
-            <div className="font-mono text-[6px] font-bold uppercase tracking-wider text-sat-dim">
+            <div className="font-mono text-[8px] font-bold uppercase tracking-wider text-sat-dim">
               {label}
             </div>
 
@@ -1952,9 +1894,9 @@ const QueryReadiness: React.FC<
       >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1.5">
-            <Activity className="h-3 w-3 text-sat-accent" />
+            <Activity className="h-3.5 w-3.5 text-sat-accent" />
 
-            <span className="font-mono text-[7px] font-bold uppercase tracking-wider text-sat-dim">
+            <span className="font-mono text-xs font-bold uppercase tracking-wider text-sat-dim">
               Query readiness
             </span>
           </div>
@@ -1962,7 +1904,7 @@ const QueryReadiness: React.FC<
           <span
             className={`
             font-mono
-            text-[7px]
+            text-xs
             font-bold
             uppercase
             ${items.every((item) => item.ok)
@@ -1987,8 +1929,8 @@ const QueryReadiness: React.FC<
               gap-1.5
               rounded
               border
-              px-2
-              py-1.5
+              px-2.5
+              py-2
               ${item.ok
                   ? 'border-sat-stable/20 bg-sat-stable/5'
                   : 'border-sat-change/20 bg-sat-change/5'
@@ -1996,12 +1938,12 @@ const QueryReadiness: React.FC<
             `}
             >
               {item.ok ? (
-                <Check className="h-2.5 w-2.5 shrink-0 text-sat-stable" />
+                <Check className="h-3 w-3 shrink-0 text-sat-stable" />
               ) : (
-                <CircleAlert className="h-2.5 w-2.5 shrink-0 text-sat-change" />
+                <CircleAlert className="h-3 w-3 shrink-0 text-sat-change" />
               )}
 
-              <span className="truncate font-mono text-[6px] font-bold uppercase text-sat-dim">
+              <span className="truncate font-mono text-xs font-bold uppercase text-sat-dim">
                 {item.label}
               </span>
             </div>
@@ -2033,7 +1975,7 @@ const ContextItem: React.FC<
         py-1.5
       "
     >
-      <div className="font-mono text-[6px] uppercase tracking-wider text-sat-dim">
+      <div className="font-mono text-[8px] uppercase tracking-wider text-sat-dim">
         {label}
       </div>
 

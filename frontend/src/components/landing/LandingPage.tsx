@@ -5,6 +5,7 @@ import { SystemWorkflowSection } from './SystemWorkflowSection';
 interface LandingPageProps {
   onEnterWorkspace: () => void;
   onViewDemo: () => void;
+  workflowRef?: React.RefObject<HTMLDivElement | null>;
 }
 
 // Realistic Satellite Observation Telemetry Points for Scientific Instrument Animation
@@ -63,7 +64,7 @@ const OBSERVATION_POINTS = [
   }
 ];
 
-export const LandingPage: React.FC<LandingPageProps> = ({ onEnterWorkspace, onViewDemo }) => {
+export const LandingPage: React.FC<LandingPageProps> = ({ onEnterWorkspace, onViewDemo, workflowRef }) => {
   // Active Satellite Observation Cycle State
   const [activePointIndex, setActivePointIndex] = useState(0);
   const [orbitAngle, setOrbitAngle] = useState(0);
@@ -385,7 +386,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnterWorkspace, onVi
       </main>
 
       {/* System Workflow Pipeline & Telemetry Status Bar Section */}
-      <SystemWorkflowSection onSelectStage={() => onEnterWorkspace()} />
+      <div ref={workflowRef}>
+        <SystemWorkflowSection onSelectStage={() => onEnterWorkspace()} />
+      </div>
 
     </div>
   );

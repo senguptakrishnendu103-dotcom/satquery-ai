@@ -38,7 +38,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
             <span className="font-display font-bold tracking-widest text-base text-slate-100 dark:text-slate-100 text-slate-900 block leading-none">
               SATQUERY
             </span>
-            <span className="font-mono text-[9px] tracking-wider text-sat-dim block mt-0.5 uppercase">
+            <span className="font-mono text-xs font-semibold tracking-wider text-sat-dim block mt-0.5 uppercase">
               INTELLIGENCE SYSTEM
             </span>
           </div>
@@ -48,13 +48,13 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
         <div className="h-5 w-px bg-sat-border hidden md:block" />
 
         {/* Center Navigation Links */}
-        <nav className="hidden md:flex items-center space-x-1 font-mono text-xs">
+        <nav className="hidden md:flex items-center space-x-1.5 font-mono text-xs">
           <button
             onClick={() => setActiveView('LANDING')}
             className={`px-3 py-1.5 rounded text-xs transition-colors ${
               activeView === 'LANDING'
-                ? 'bg-sat-panel text-sat-text border border-sat-borderLight font-semibold'
-                : 'text-sat-muted hover:text-sat-text hover:bg-sat-panel/50'
+                ? 'bg-sat-panel text-sat-text border border-sat-borderLight font-bold'
+                : 'text-sat-muted hover:text-sat-text hover:bg-sat-panel/50 font-medium'
             }`}
           >
             OVERVIEW
@@ -62,10 +62,10 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
 
           <button
             onClick={() => setActiveView('WORKSPACE')}
-            className={`px-3 py-1.5 rounded text-xs flex items-center space-x-1.5 transition-colors ${
+            className={`px-3.5 py-1.5 rounded text-xs flex items-center space-x-1.5 transition-colors ${
               activeView === 'WORKSPACE'
                 ? 'bg-sat-accent text-slate-950 font-bold shadow-sm'
-                : 'text-sat-muted hover:text-sat-text hover:bg-sat-panel/50'
+                : 'text-sat-muted hover:text-sat-text hover:bg-sat-panel/50 font-medium'
             }`}
           >
             <Layers className="w-3.5 h-3.5" />
@@ -75,7 +75,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
           {onScrollToWorkflow && (
             <button
               onClick={onScrollToWorkflow}
-              className="px-3 py-1.5 rounded text-xs flex items-center space-x-1.5 text-sat-muted hover:text-sat-accent hover:bg-sat-panel/50 transition-colors"
+              className="px-3 py-1.5 rounded text-xs flex items-center space-x-1.5 text-sat-muted hover:text-sat-accent hover:bg-sat-panel/50 font-medium transition-colors"
             >
               <Activity className="w-3.5 h-3.5 text-sat-accent" />
               <span>WORKFLOW</span>
@@ -86,8 +86,8 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
             onClick={() => setActiveView('HISTORY')}
             className={`px-3 py-1.5 rounded text-xs flex items-center space-x-1.5 transition-colors ${
               activeView === 'HISTORY'
-                ? 'bg-sat-panel text-sat-text border border-sat-borderLight font-semibold'
-                : 'text-sat-muted hover:text-sat-text hover:bg-sat-panel/50'
+                ? 'bg-sat-panel text-sat-text border border-sat-borderLight font-bold'
+                : 'text-sat-muted hover:text-sat-text hover:bg-sat-panel/50 font-medium'
             }`}
           >
             <Clock className="w-3.5 h-3.5" />
@@ -101,7 +101,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
         {onOpenDemoSelector && (
           <button
             onClick={onOpenDemoSelector}
-            className="px-2.5 py-1 rounded bg-sat-panel border border-sat-border text-sat-accent text-[11px] font-semibold flex items-center space-x-1.5 hover:border-sat-accent transition-colors"
+            className="px-3 py-1.5 rounded bg-sat-panel border border-sat-border text-sat-accent text-xs font-bold flex items-center space-x-1.5 hover:border-sat-accent transition-colors"
           >
             <Sparkles className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">PRESET DEMOS</span>
@@ -109,7 +109,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
         )}
 
         {/* System Ready Badge */}
-        <div className="flex items-center space-x-2 px-2.5 py-1 rounded bg-sat-bg border border-sat-border text-[11px]">
+        <div className="flex items-center space-x-2 px-3 py-1.5 rounded bg-sat-bg border border-sat-border text-xs">
           <span className="relative flex h-2 w-2">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-sat-stable opacity-75"></span>
             <span className="relative inline-flex rounded-full h-2 w-2 bg-sat-stable"></span>
@@ -123,14 +123,14 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
         <button
           onClick={onToggleTheme}
           title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Mode`}
-          className="p-1.5 rounded bg-sat-bg border border-sat-border text-sat-accent hover:border-sat-accent transition-colors flex items-center space-x-1 text-xs"
+          className="p-1.5 px-2 rounded bg-sat-bg border border-sat-border text-sat-accent hover:border-sat-accent transition-colors flex items-center space-x-1.5 text-xs font-bold"
         >
           {theme === 'dark' ? (
             <Sun className="w-3.5 h-3.5" />
           ) : (
             <Moon className="w-3.5 h-3.5" />
           )}
-          <span className="text-[10px] hidden md:inline font-bold uppercase">
+          <span className="hidden md:inline uppercase">
             {theme === 'dark' ? 'LIGHT' : 'DARK'}
           </span>
         </button>
@@ -140,10 +140,10 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
           <button
             onClick={onOpenSettings}
             title="Platform Settings & Preferences"
-            className="p-1.5 rounded bg-sat-bg border border-sat-border text-sat-dim hover:text-sat-accent hover:border-sat-accent transition-colors flex items-center space-x-1"
+            className="p-1.5 px-2 rounded bg-sat-bg border border-sat-border text-sat-dim hover:text-sat-accent hover:border-sat-accent transition-colors flex items-center space-x-1.5 text-xs font-bold"
           >
             <Settings className="w-3.5 h-3.5" />
-            <span className="text-[10px] hidden md:inline font-bold uppercase">SETTINGS</span>
+            <span className="hidden md:inline uppercase">SETTINGS</span>
           </button>
         )}
 

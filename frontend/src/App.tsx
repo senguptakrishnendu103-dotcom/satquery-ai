@@ -15,7 +15,6 @@ import { DemoSelectorModal } from './components/demo/DemoSelectorModal';
 import { SatelliteSearchModal } from './components/observation/SatelliteSearchModal';
 import { SettingsModal } from './components/settings/SettingsModal';
 import { LiveSpaceBackground } from './components/background/LiveSpaceBackground';
-import { SystemWorkflowSection } from './components/landing/SystemWorkflowSection';
 
 
 export function App() {
@@ -68,11 +67,17 @@ export function App() {
   const [currentDemoId, setCurrentDemoId] = useState<string>('demo-03');
   const [historyItems, setHistoryItems] = useState<QueryHistoryItem[]>([]);
 
-  // Workflow section ref for smooth scrolling
+  // Workspace Simplification State
+  // The Observation panel now lives in a slide-over drawer, closed by
+  // default, so a new user sees just "the map" and "the question box"
+  // instead of three permanently-competing columns.
+  const [isObservationDrawerOpen, setIsObservationDrawerOpen] = useState<boolean>(false);
+
+  // Workflow section ref for smooth scrolling to Landing overview page bottom
   const workflowRef = useRef<HTMLDivElement>(null);
   const handleScrollToWorkflow = () => {
-    if (activeView !== 'WORKSPACE') {
-      setActiveView('WORKSPACE');
+    if (activeView !== 'LANDING') {
+      setActiveView('LANDING');
       setTimeout(() => {
         workflowRef.current?.scrollIntoView({ behavior: 'smooth' });
       }, 100);
@@ -103,13 +108,51 @@ export function App() {
   const handleAddObservation = async (file: File, modality: ModalityType) => {
     const newObs = await satQueryService.uploadObservation(file, file.name.replace(/\.[^/.]+$/, ""), modality);
     setObservations(prev => [newObs, ...prev]);
-    setActiveObservationIds(prev => [newObs.id, ...prev]);
+    setActiveObservationIds([newObs.id]); // Activate ONLY the new observation
+    setActiveResult(null); // Reset old result panel to reflect fresh observation
   };
 
   // Handle Ingesting Satellite Product from CDSE Catalogue Search
-  const handleAddObservationFromProduct = (obs: Observation) => {
-    setObservations(prev => [obs, ...prev]);
-    setActiveObservationIds(prev => [obs.id, ...prev]);
+  const handleAddObservationFromProduct = (prod: any) => {
+    const modality: ModalityType = (prod.modality?.toUpperCase() === 'SAR' || (prod.platform && prod.platform.includes('Sentinel-1'))) ? 'SAR' : 'OPTICAL';
+    const isSar = modality === 'SAR';
+    const defaultImg = isSar
+      ? 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=1600&q=80'
+      : 'https://images.unsplash.com/photo-1541872703-74c5e44368f9?auto=format&fit=crop&w=1600&q=80';
+    const defaultThumb = isSar
+      ? 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=300&q=80'
+      : 'https://images.unsplash.com/photo-1541872703-74c5e44368f9?auto=format&fit=crop&w=300&q=80';
+
+    const dateStr = prod.acquisition_datetime
+      ? new Date(prod.acquisition_datetime).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase()
+      : new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase();
+
+    const newObs: Observation = {
+      id: `obs-cdse-${Date.now()}`,
+      name: prod.metadata?.name || prod.title || prod.product_id || 'Copernicus Observation',
+      filename: `${prod.product_id || 'sentinel'}.tif`,
+      modality: modality,
+      date: dateStr,
+      dimensions: prod.resolution ? `${Math.round(2048 * (10 / (prod.resolution || 10)))} × 2048` : '3840 × 2160',
+      status: 'READY',
+      metadata: {
+        sensor: prod.platform || prod.instrument || `Sentinel-${isSar ? '1 SAR' : '2 MSI'}`,
+        lat: prod.bbox ? (prod.bbox[1] + prod.bbox[3]) / 2 : 25.2048,
+        lon: prod.bbox ? (prod.bbox[0] + prod.bbox[2]) / 2 : 55.2708,
+        cloudCover: prod.cloud_cover !== null && prod.cloud_cover !== undefined ? `${prod.cloud_cover.toFixed(1)}%` : '0.0%',
+        bands: isSar ? 'VV + VH Polarized Radar' : 'RGB High-Res',
+        fileSize: prod.size ? `${(prod.size / (1024 * 1024)).toFixed(1)} MB` : '52.4 MB',
+        groundSamplingDistance: prod.resolution ? `${prod.resolution}m/px` : '10m/px',
+        acquisitionTime: prod.acquisition_datetime ? prod.acquisition_datetime.substring(11, 19) + ' UTC' : '10:00:00 UTC'
+      },
+      imageUrl: prod.quicklook_url || defaultImg,
+      thumbnailUrl: prod.quicklook_url || defaultThumb,
+      isDemo: false
+    };
+
+    setObservations(prev => [newObs, ...prev]);
+    setActiveObservationIds([newObs.id]); // Activate ONLY the newly ingested product
+    setActiveResult(null); // Reset previous result panel
   };
 
   // Handle Query Submission & Agent Sequence
@@ -161,7 +204,7 @@ export function App() {
 
   return (
     <div className="min-h-screen bg-transparent text-sat-text flex flex-col font-sans selection:bg-sat-accent/30 selection:text-sat-accent transition-colors duration-200 relative overflow-x-hidden">
-      
+
       {/* Live Animated Space Background (Mouse Parallax + Cosmic Drift + Twinkling Stars) */}
       <LiveSpaceBackground />
 
@@ -179,10 +222,11 @@ export function App() {
 
       {/* Main Container Views */}
       <div className="flex-1 flex flex-col overflow-hidden z-10 relative">
-        
+
         {/* VIEW 1: LANDING PAGE */}
         {activeView === 'LANDING' && (
           <LandingPage
+            workflowRef={workflowRef}
             onEnterWorkspace={() => setActiveView('WORKSPACE')}
             onViewDemo={() => {
               handleSelectDemoScenario(DEMO_SCENARIOS[2]);
@@ -193,28 +237,24 @@ export function App() {
         {/* VIEW 2: WORKSPACE (DESKTOP & RESPONSIVE STACK) */}
         {activeView === 'WORKSPACE' && (
           <div className="flex-1 flex flex-col overflow-y-auto min-h-0">
-            
-            {/* Desktop 3-Column Layout & Central Canvas */}
-            <div className="flex-none h-[calc(100vh-3.5rem)] grid grid-cols-1 lg:grid-cols-12 overflow-hidden border-b border-sat-border">
-              
-              {/* Left Column: Data / Observations Panel (3 Cols) */}
-              <div className="lg:col-span-3 h-full overflow-hidden border-b lg:border-b-0 border-sat-border">
-                <ObservationPanel
-                  observations={observations}
-                  activeObservationIds={activeObservationIds}
-                  onToggleObservation={handleToggleObservation}
-                  onAddObservation={handleAddObservation}
-                  onAddObservationFromProduct={handleAddObservationFromProduct}
-                  onOpenSearchModal={() => setIsSearchModalOpen(true)}
-                  onSelectDemoScenario={(demoId) => {
-                    const scenario = DEMO_SCENARIOS.find(s => s.id === demoId);
-                    if (scenario) handleSelectDemoScenario(scenario);
-                  }}
-                />
-              </div>
 
-              {/* Center Column: Central Earth GIS Canvas (6 Cols) */}
-              <div className="lg:col-span-6 h-full overflow-hidden border-b lg:border-b-0 border-sat-border">
+
+
+            {/* Two-Zone Workspace: Canvas + Query. Observation management
+                lives in a drawer (see below) rather than a permanent column,
+                so a new user has two things to look at, not three. */}
+            <div className="flex-none h-[calc(100vh-3.5rem)] grid grid-cols-1 lg:grid-cols-9 overflow-hidden border-b border-sat-border relative">
+
+              {/* Center: Central Earth GIS Canvas */}
+              <div className="lg:col-span-6 h-full overflow-hidden border-b lg:border-b-0 lg:border-r border-sat-border relative">
+                {/* Floating toggle for the Observation drawer */}
+                <button
+                  onClick={() => setIsObservationDrawerOpen(true)}
+                  className="absolute top-3 left-3 z-20 flex items-center gap-1.5 px-3 py-1.5 rounded bg-sat-surface/90 backdrop-blur border border-sat-border hover:border-sat-accent text-xs font-mono text-sat-text hover:text-sat-accent transition-colors shadow-md"
+                >
+                  🛰️ Images ({observations.length})
+                </button>
+
                 <EarthCanvas
                   observations={observations}
                   activeObservationIds={activeObservationIds}
@@ -228,7 +268,7 @@ export function App() {
                 />
               </div>
 
-              {/* Right Column: Ask SatQuery Interface (3 Cols) */}
+              {/* Right: Ask SatQuery Interface */}
               <div className="lg:col-span-3 h-full overflow-hidden">
                 <QueryInterface
                   observations={observations}
@@ -237,6 +277,43 @@ export function App() {
                   isAnalyzing={isAnalyzing}
                 />
               </div>
+
+              {/* Slide-over Drawer: Observation / Data Panel.
+                  Same ObservationPanel component and props as before —
+                  only its container changed, from a permanent column to
+                  an on-demand overlay. */}
+              {isObservationDrawerOpen && (
+                <div className="fixed inset-0 z-50 flex">
+                  <div
+                    className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+                    onClick={() => setIsObservationDrawerOpen(false)}
+                  />
+                  <div className="relative w-full max-w-lg md:w-[480px] h-full bg-sat-surface border-r border-sat-border shadow-2xl overflow-y-auto">
+                    <div className="flex items-center justify-between p-4 border-b border-sat-border bg-sat-panel">
+                      <span className="font-mono text-sm font-bold uppercase tracking-wider text-sat-text">🛰️ SATELLITE DATASETS ({observations.length})</span>
+                      <button
+                        onClick={() => setIsObservationDrawerOpen(false)}
+                        className="text-sat-dim hover:text-sat-accent transition-colors px-2 py-1 font-mono text-sm font-bold"
+                        aria-label="Close"
+                      >
+                        ✕ CLOSE
+                      </button>
+                    </div>
+                    <ObservationPanel
+                      observations={observations}
+                      activeObservationIds={activeObservationIds}
+                      onToggleObservation={handleToggleObservation}
+                      onAddObservation={handleAddObservation}
+                      onAddObservationFromProduct={handleAddObservationFromProduct}
+                      onOpenSearchModal={() => setIsSearchModalOpen(true)}
+                      onSelectDemoScenario={(demoId) => {
+                        const scenario = DEMO_SCENARIOS.find(s => s.id === demoId);
+                        if (scenario) handleSelectDemoScenario(scenario);
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
 
             </div>
 
@@ -250,11 +327,6 @@ export function App() {
                 onFollowUpQuery={handleExecuteQuery}
               />
             )}
-
-            {/* System Workflow Pipeline & Telemetry Display */}
-            <div ref={workflowRef}>
-              <SystemWorkflowSection />
-            </div>
 
           </div>
         )}
