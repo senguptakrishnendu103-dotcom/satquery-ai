@@ -713,7 +713,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
               >
                 <h1
                   className="
-                    text-lg
+                    text-2xl
                     font-bold
                     uppercase
                     tracking-wider
@@ -725,12 +725,12 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
 
                 <span
                   className="
-                    rounded
+                    rounded-full
                     border border-sat-stable/30
                     bg-sat-stable/10
-                    px-1.5
+                    px-2.5
                     py-0.5
-                    text-[7px]
+                    text-xs
                     font-bold
                     text-sat-stable
                   "
@@ -743,7 +743,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                 className="
                   mt-1
                   font-mono
-                  text-[9px]
+                  text-xs
                   uppercase
                   tracking-wider
                   text-sat-dim
@@ -764,8 +764,8 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                 absolute
                 left-3
                 top-1/2
-                h-3.5
-                w-3.5
+                h-4
+                w-4
                 -translate-y-1/2
                 text-sat-dim
               "
@@ -783,14 +783,14 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
               aria-label="Search analysis history"
               className="
                 w-full
-                rounded-md
+                rounded-lg
                 border border-sat-border
                 bg-sat-surface
-                py-2
-                pl-9
-                pr-3
+                py-2.5
+                pl-10
+                pr-4
                 font-sans
-                text-xs
+                text-sm
                 text-sat-text
                 outline-none
                 placeholder:text-sat-dim
@@ -818,12 +818,12 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
               shrink-0
               items-center
               justify-center
-              rounded-md
+              rounded-lg
               border border-sat-border
               bg-sat-surface
-              px-3
+              px-4
               font-mono
-              text-[8px]
+              text-xs
               font-bold
               text-sat-dim
               transition-colors
@@ -912,14 +912,14 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
           "
         >
           <div className="flex items-center gap-2">
-            <Clock className="h-3.5 w-3.5 text-sat-accent" />
+            <Clock className="h-4 w-4 text-sat-accent" />
 
-            <span className="font-mono text-[9px] font-bold uppercase tracking-wider text-sat-text">
+            <span className="font-mono text-sm font-bold uppercase tracking-wider text-sat-text">
               Execution Archive
             </span>
           </div>
 
-          <span className="font-mono text-[8px] text-sat-dim">
+          <span className="font-mono text-xs text-sat-dim">
             {filteredItems.length} OF{' '}
             {historyItems.length} RECORDS
           </span>
@@ -933,37 +933,37 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                   border-b border-sat-border
                   bg-sat-bg
                   font-mono
-                  text-[8px]
+                  text-xs
                   uppercase
                   tracking-wider
                   text-sat-dim
                 "
               >
-                <th className="px-4 py-3 font-bold">
+                <th className="px-4 py-3.5 font-bold">
                   TIMESTAMP
                 </th>
 
-                <th className="px-4 py-3 font-bold">
+                <th className="px-4 py-3.5 font-bold">
                   QUESTION / QUERY
                 </th>
 
-                <th className="px-4 py-3 font-bold">
+                <th className="px-4 py-3.5 font-bold">
                   ANALYSIS
                 </th>
 
-                <th className="px-4 py-3 font-bold">
+                <th className="px-4 py-3.5 font-bold">
                   INPUT DATA
                 </th>
 
-                <th className="px-4 py-3 text-center font-bold">
+                <th className="px-4 py-3.5 text-center font-bold">
                   CONFIDENCE
                 </th>
 
-                <th className="px-4 py-3 text-center font-bold">
+                <th className="px-4 py-3.5 text-center font-bold">
                   STATUS
                 </th>
 
-                <th className="px-4 py-3 text-right font-bold">
+                <th className="px-4 py-3.5 text-right font-bold">
                   ACTIONS
                 </th>
               </tr>
@@ -977,13 +977,13 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                     className="p-12 text-center"
                   >
                     <div className="mx-auto max-w-sm">
-                      <Search className="mx-auto h-5 w-5 text-sat-dim" />
+                      <Search className="mx-auto h-6 w-6 text-sat-dim" />
 
-                      <div className="mt-3 font-mono text-[10px] font-bold uppercase tracking-wider text-sat-text">
+                      <div className="mt-3 font-mono text-sm font-bold uppercase tracking-wider text-sat-text">
                         NO ANALYSIS HISTORY FOUND
                       </div>
 
-                      <div className="mt-1 font-sans text-xs text-sat-dim">
+                      <div className="mt-1 font-sans text-sm text-sat-dim">
                         Try a different query,
                         analysis type or
                         observation name.
@@ -1015,26 +1015,26 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                         hover:bg-sat-panel/60
                       "
                     >
-                      <td className="whitespace-nowrap px-4 py-3.5 font-mono text-[8px] text-sat-dim">
+                      <td className="whitespace-nowrap px-4 py-4 font-mono text-xs text-sat-dim">
                         {item.timestamp}
                       </td>
 
-                      <td className="max-w-[300px] px-4 py-3.5">
-                        <div className="truncate font-sans text-[10px] font-medium text-sat-text transition-colors group-hover:text-sat-accent">
+                      <td className="max-w-[320px] px-4 py-4">
+                        <div className="truncate font-sans text-sm font-medium text-sat-text transition-colors group-hover:text-sat-accent">
                           "{item.queryText}"
                         </div>
                       </td>
 
-                      <td className="px-4 py-3.5">
+                      <td className="px-4 py-4">
                         <span
                           className="
-                            rounded
+                            rounded-md
                             border border-sat-accent/20
                             bg-sat-accent/5
-                            px-2
+                            px-2.5
                             py-1
                             font-mono
-                            text-[8px]
+                            text-xs
                             font-bold
                             text-sat-accent
                           "
@@ -1043,13 +1043,13 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                         </span>
                       </td>
 
-                      <td className="max-w-[230px] px-4 py-3.5">
+                      <td className="max-w-[240px] px-4 py-4">
                         <div className="flex items-center gap-1.5">
-                          <span className="font-mono text-[8px] text-sat-dim">
-                            {item.observationsUsed.length}
+                          <span className="font-mono text-xs font-bold text-sat-dim">
+                            [{item.observationsUsed.length}]
                           </span>
 
-                          <span className="truncate font-mono text-[8px] text-sat-muted">
+                          <span className="truncate font-mono text-xs text-sat-muted">
                             {item.observationsUsed.join(
                               ', '
                             )}
@@ -1057,15 +1057,15 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                         </div>
                       </td>
 
-                      <td className="px-4 py-3.5">
-                        <div className="mx-auto w-20">
-                          <div className="flex items-center justify-between font-mono text-[8px]">
+                      <td className="px-4 py-4">
+                        <div className="mx-auto w-24">
+                          <div className="flex items-center justify-between font-mono text-xs">
                             <span className="font-bold text-sat-stable">
                               {confidence}%
                             </span>
                           </div>
 
-                          <div className="mt-1 h-1 overflow-hidden rounded-full bg-sat-panel">
+                          <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-sat-panel">
                             <div
                               className="h-full rounded-full bg-sat-stable transition-all"
                               style={{
@@ -1076,31 +1076,31 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                         </div>
                       </td>
 
-                      <td className="px-4 py-3.5 text-center">
+                      <td className="px-4 py-4 text-center">
                         <span
                           className="
                             inline-flex
                             items-center
                             gap-1.5
-                            rounded
+                            rounded-md
                             border border-sat-stable/20
                             bg-sat-stable/5
-                            px-2
+                            px-2.5
                             py-1
                             font-mono
-                            text-[7px]
+                            text-xs
                             font-bold
                             uppercase
                             text-sat-stable
                           "
                         >
-                          <CheckCircle2 className="h-2.5 w-2.5" />
+                          <CheckCircle2 className="h-3.5 w-3.5" />
                           {item.status}
                         </span>
                       </td>
 
-                      <td className="px-4 py-3.5">
-                        <div className="flex items-center justify-end gap-1.5">
+                      <td className="px-4 py-4">
+                        <div className="flex items-center justify-end gap-2">
                           <button
                             type="button"
                             onClick={(event) => {
@@ -1110,22 +1110,22 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                             title="Download PDF Brief"
                             className="
                               flex
-                              h-7
+                              h-8
                               items-center
-                              gap-1
-                              rounded
+                              gap-1.5
+                              rounded-md
                               border border-amber-500/40
                               bg-amber-500/10
-                              px-2.5
+                              px-3
                               font-mono
-                              text-[8px]
+                              text-xs
                               font-bold
                               text-amber-400
                               transition-colors
                               hover:bg-amber-500/20
                             "
                           >
-                            <FileText className="h-2.5 w-2.5" />
+                            <FileText className="h-3.5 w-3.5" />
                             PDF BRIEF
                           </button>
 
@@ -1138,15 +1138,15 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                             title="Replay analysis"
                             className="
                               flex
-                              h-7
+                              h-8
                               items-center
-                              gap-1
-                              rounded
+                              gap-1.5
+                              rounded-md
                               border border-sat-border
                               bg-sat-panel
-                              px-2
+                              px-3
                               font-mono
-                              text-[7px]
+                              text-xs
                               font-bold
                               text-sat-muted
                               transition-colors
@@ -1154,7 +1154,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                               hover:text-sat-accent
                             "
                           >
-                            <Play className="h-2.5 w-2.5 fill-current" />
+                            <Play className="h-3 w-3 fill-current" />
                             REPLAY
                           </button>
 
@@ -1174,22 +1174,22 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                               title="Export intelligence brief"
                               className="
                                 flex
-                                h-7
+                                h-8
                                 items-center
-                                gap-1
-                                rounded
+                                gap-1.5
+                                rounded-md
                                 border border-sat-accent/30
                                 bg-sat-accent/5
-                                px-2
+                                px-3
                                 font-mono
-                                text-[7px]
+                                text-xs
                                 font-bold
                                 text-sat-accent
                                 transition-colors
                                 hover:bg-sat-accent/10
                               "
                             >
-                              <Download className="h-2.5 w-2.5" />
+                              <Download className="h-3.5 w-3.5" />
                               EXPORT
                             </button>
 
@@ -1360,7 +1360,7 @@ const MetricCard: React.FC<
         rounded-lg
         border border-sat-border
         bg-sat-surface
-        p-3
+        p-4
         shadow-sm
       "
       >
@@ -1376,16 +1376,16 @@ const MetricCard: React.FC<
             {icon}
           </div>
 
-          <span className="font-mono text-[6px] uppercase tracking-wider text-sat-dim">
+          <span className="font-mono text-xs uppercase tracking-wider text-sat-dim">
             TELEMETRY
           </span>
         </div>
 
-        <div className="mt-3 font-mono text-lg font-bold text-sat-text">
+        <div className="mt-3 font-mono text-2xl font-bold text-sat-text">
           {value}
         </div>
 
-        <div className="mt-0.5 font-mono text-[7px] font-bold uppercase tracking-wider text-sat-dim">
+        <div className="mt-1 font-mono text-xs font-bold uppercase tracking-wider text-sat-dim">
           {label}
         </div>
       </div>
@@ -1722,7 +1722,7 @@ const ReplayModal: React.FC<
                 p-3
               "
               >
-                <div className="font-mono text-[8px] font-bold uppercase tracking-wider text-sat-dim">
+                <div className="font-mono text-xs font-bold uppercase tracking-wider text-sat-dim">
                   EXECUTION PATH
                 </div>
 
@@ -1750,14 +1750,14 @@ const ReplayModal: React.FC<
                           flex
                           w-full
                           items-center
-                          gap-2
-                          rounded
-                          px-2
-                          py-2
+                          gap-2.5
+                          rounded-md
+                          px-3
+                          py-2.5
                           text-left
                           transition-colors
                           ${active
-                              ? 'bg-sat-accent/10 text-sat-accent'
+                              ? 'bg-sat-accent/10 text-sat-accent font-bold'
                               : 'text-sat-dim hover:bg-sat-panel hover:text-sat-text'
                             }
                         `}
@@ -1765,15 +1765,15 @@ const ReplayModal: React.FC<
                           <span
                             className={`
                             flex
-                            h-4
-                            w-4
+                            h-5
+                            w-5
                             shrink-0
                             items-center
                             justify-center
                             rounded-full
                             border
                             font-mono
-                            text-[5px]
+                            text-xs
                             ${complete ||
                                 active
                                 ? 'border-sat-accent bg-sat-accent/15 text-sat-accent'
@@ -1782,13 +1782,13 @@ const ReplayModal: React.FC<
                           `}
                           >
                             {complete ? (
-                              <Check className="h-2.5 w-2.5" />
+                              <Check className="h-3 w-3" />
                             ) : (
                               index + 1
                             )}
                           </span>
 
-                          <span className="truncate font-mono text-[7px] font-bold uppercase">
+                          <span className="truncate font-mono text-xs font-bold uppercase">
                             {
                               timelineStep.label
                             }
@@ -1811,23 +1811,23 @@ const ReplayModal: React.FC<
               p-4
             "
             >
-              <div className="font-mono text-[8px] font-bold uppercase tracking-wider text-sat-dim">
+              <div className="font-mono text-xs font-bold uppercase tracking-wider text-sat-dim">
                 INPUT DATASETS
               </div>
 
-              <div className="mt-2 flex flex-wrap gap-1.5">
+              <div className="mt-2 flex flex-wrap gap-2">
                 {item.observationsUsed.map(
                   (observation, index) => (
                     <span
                       key={`${observation}-${index}`}
                       className="
-                      rounded
+                      rounded-md
                       border border-sat-border
                       bg-sat-surface
-                      px-2
+                      px-2.5
                       py-1.5
                       font-mono
-                      text-[8px]
+                      text-xs
                       text-sat-muted
                     "
                     >
@@ -1847,13 +1847,13 @@ const ReplayModal: React.FC<
             gap-2
             border-t border-sat-border
             bg-sat-panel/40
-            p-3
+            p-4
             sm:flex-row
             sm:items-center
             sm:justify-between
           "
           >
-            <div className="font-mono text-[7px] text-sat-dim">
+            <div className="font-mono text-xs text-sat-dim">
               STEP {currentStep + 1}:{' '}
               {step.shortLabel}
             </div>
@@ -1870,14 +1870,14 @@ const ReplayModal: React.FC<
                 className="
                 flex
                 items-center
-                gap-1
-                rounded
+                gap-1.5
+                rounded-md
                 border border-sat-border
                 bg-sat-surface
-                px-3
+                px-4
                 py-2
                 font-mono
-                text-[7px]
+                text-xs
                 font-bold
                 text-sat-muted
                 transition-colors
@@ -1887,7 +1887,7 @@ const ReplayModal: React.FC<
                 disabled:opacity-30
               "
               >
-                <ChevronLeft className="h-3 w-3" />
+                <ChevronLeft className="h-4 w-4" />
                 PREVIOUS
               </button>
 
@@ -1902,13 +1902,13 @@ const ReplayModal: React.FC<
                   className="
                   flex
                   items-center
-                  gap-1
-                  rounded
+                  gap-1.5
+                  rounded-md
                   bg-sat-accent
-                  px-3
+                  px-4
                   py-2
                   font-mono
-                  text-[7px]
+                  text-xs
                   font-bold
                   text-slate-950
                   transition-colors
@@ -1916,7 +1916,7 @@ const ReplayModal: React.FC<
                 "
                 >
                   NEXT
-                  <ChevronRight className="h-3 w-3" />
+                  <ChevronRight className="h-4 w-4" />
                 </button>
               ) : (
                 <button
@@ -1926,12 +1926,12 @@ const ReplayModal: React.FC<
                   flex
                   items-center
                   gap-1.5
-                  rounded
+                  rounded-md
                   bg-sat-accent
-                  px-3
+                  px-4
                   py-2
                   font-mono
-                  text-[7px]
+                  text-xs
                   font-bold
                   text-slate-950
                   transition-colors
@@ -1939,7 +1939,7 @@ const ReplayModal: React.FC<
                 "
                 >
                   OPEN RESULT
-                  <ArrowUpRight className="h-3 w-3" />
+                  <ArrowUpRight className="h-4 w-4" />
                 </button>
               )}
             </div>
@@ -1965,13 +1965,13 @@ const ReplayData: React.FC<
     <div
       className="
         min-w-0
-        rounded
+        rounded-md
         border border-sat-border
         bg-sat-bg
-        p-2
+        p-2.5
       "
     >
-      <div className="font-mono text-[6px] uppercase tracking-wider text-sat-dim">
+      <div className="font-mono text-xs uppercase tracking-wider text-sat-dim">
         {label}
       </div>
 
@@ -1980,7 +1980,7 @@ const ReplayData: React.FC<
           mt-1
           truncate
           font-mono
-          text-[8px]
+          text-xs
           font-bold
           text-sat-text
         "
