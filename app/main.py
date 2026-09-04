@@ -1,7 +1,25 @@
 import os
 import shutil
 from typing import Dict, Any, List, Optional
-from fastapi import FastAPI, File, UploadFile, Form, HTTPException
+from fastapi import FastAPI, File, UploadFile, Form, HTTPException, Response
+import requests
+
+@app.get("/api/data-sources/copernicus/quicklook/{product_id}")
+def get_copernicus_quicklook(product_id: str):
+    """
+    Proxy live satellite quicklook raster from Copernicus Data Space Ecosystem (CDSE).
+    Streams the genuine product JPEG quicklook image into SatQuery canvas and model pipeline.
+    """
+    clean_id = product_id.strip()
+    url = f"https://catalogue.dataspace.copernicus.eu/odata/v1/Products({clean_id})/$value"
+    try:
+        resp = requests.get(url, timeout=12)
+        if resp.status_code == 200 and len(resp.content) > 0:
+            return Response(content=resp.content, media_type="image/jpeg")
+    except Exception as e:
+        pass
+
+    raise HTTPException(status_code=404, detail="Copernicus quicklook image temporarily unavailable")
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel

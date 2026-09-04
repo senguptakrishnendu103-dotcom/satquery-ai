@@ -127,6 +127,8 @@ export function App() {
       ? new Date(prod.acquisition_datetime).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase()
       : new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase();
 
+    const realCdseUrl = prod.thumbnail_url || (prod.product_id ? `/api/data-sources/copernicus/quicklook/${prod.product_id}` : null);
+
     const newObs: Observation = {
       id: `obs-cdse-${Date.now()}`,
       name: prod.metadata?.name || prod.title || prod.product_id || 'Copernicus Observation',
@@ -145,8 +147,8 @@ export function App() {
         groundSamplingDistance: prod.resolution ? `${prod.resolution}m/px` : '10m/px',
         acquisitionTime: prod.acquisition_datetime ? prod.acquisition_datetime.substring(11, 19) + ' UTC' : '10:00:00 UTC'
       },
-      imageUrl: prod.quicklook_url || defaultImg,
-      thumbnailUrl: prod.quicklook_url || defaultThumb,
+      imageUrl: realCdseUrl || defaultImg,
+      thumbnailUrl: realCdseUrl || defaultThumb,
       isDemo: false
     };
 

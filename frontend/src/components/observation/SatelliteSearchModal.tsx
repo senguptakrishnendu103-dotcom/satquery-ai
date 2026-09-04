@@ -116,7 +116,16 @@ export const SatelliteSearchModal: React.FC<SatelliteSearchModalProps> = ({
       });
 
       if (res && res.products && res.products.length > 0) {
-        setResults(res.products);
+        const enriched = res.products.map((prod: any) => ({
+          ...prod,
+          thumbnail_url: prod.product_id
+            ? `/api/data-sources/copernicus/quicklook/${prod.product_id}`
+            : prod.thumbnail_url,
+          quicklook_url: prod.product_id
+            ? `/api/data-sources/copernicus/quicklook/${prod.product_id}`
+            : prod.thumbnail_url,
+        }));
+        setResults(enriched);
       } else {
         // Fallback to mock products filtered or synthesized
         setResults(MOCK_PRODUCTS);
