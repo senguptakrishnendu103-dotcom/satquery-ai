@@ -143,7 +143,7 @@ export const ObservationPanel: React.FC<ObservationPanelProps> = ({
   onSelectDemoScenario,
   onOpenSearchModal,
 }) => {
-  const [selectedModality, setSelectedModality] =
+  const [selectedModality] =
     useState<ModalityType>('OPTICAL');
 
   const [selectedSpectralView, setSelectedSpectralView] =

@@ -52,6 +52,13 @@ class ImageResolver:
         if local_path:
             return ImageResolver._load_local_as_rgb(local_path, obs)
 
+        if "/api/data-sources/copernicus/quicklook/" in target:
+            product_id = target.split("/quicklook/")[-1].split("?")[0].strip()
+            return ImageResolver._load_copernicus_quicklook_direct(product_id)
+
+        if target.startswith("/api/"):
+            target = f"http://127.0.0.1:8000{target}"
+
         if target.startswith(("http://", "https://")):
             return ImageResolver._load_remote_image(target)
 
@@ -114,6 +121,50 @@ class ImageResolver:
                 return img.convert("RGB")
         except Exception as exc:
             raise ValueError(f"Unable to open image asset '{path}': {exc}") from exc
+
+    @staticmethod
+    def _load_copernicus_quicklook_direct(product_id: str) -> Image.Image:
+        cache_file = os.path.join(UPLOAD_DIR, f"quicklook_{product_id}.jpg")
+        if os.path.isfile(cache_file):
+            try:
+                with Image.open(cache_file) as img:
+                    return img.convert("RGB")
+            except Exception:
+                pass
+
+        try:
+            cat_url = f"https://catalogue.dataspace.copernicus.eu/odata/v1/Products({product_id})?$expand=Assets"
+            cat_res = requests.get(cat_url, timeout=30)
+            cat_res.raise_for_status()
+            product = cat_res.json()
+
+            quicklook = None
+            for asset in product.get("Assets", []):
+                if str(asset.get("Type", "")).upper() == "QUICKLOOK":
+                    quicklook = asset
+                    break
+
+            if not quicklook:
+                raise ValueError(f"No QUICKLOOK asset available for CDSE product {product_id}.")
+
+            asset_id = quicklook.get("Id")
+            if not asset_id:
+                raise ValueError(f"QUICKLOOK asset for CDSE product {product_id} has no ID.")
+
+            img_url = f"https://catalogue.dataspace.copernicus.eu/odata/v1/Assets({asset_id})/$value"
+            img_res = requests.get(img_url, timeout=30)
+            img_res.raise_for_status()
+
+            try:
+                with open(cache_file, "wb") as f:
+                    f.write(img_res.content)
+            except Exception:
+                pass
+
+            with Image.open(io.BytesIO(img_res.content)) as img:
+                return img.convert("RGB")
+        except Exception as exc:
+            raise ValueError(f"Unable to load Copernicus quicklook directly for product {product_id}: {exc}") from exc
 
     @staticmethod
     def _load_remote_image(url: str) -> Image.Image:

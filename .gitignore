@@ -28,5 +28,6 @@ Thumbs.db
 # Ingested upload rasters
 app/static/uploads/*.tif
 app/static/uploads/*.png
+app/static/uploads/*.jpg
 app/static/uploads/*.geotiff
 app/static/uploads/cdse_products/

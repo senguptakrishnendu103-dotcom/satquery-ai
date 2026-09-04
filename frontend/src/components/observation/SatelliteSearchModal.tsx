@@ -6,7 +6,6 @@ import {
   MapPin,
   Cloud,
   Satellite,
-  Plus,
   Check,
   Loader2,
   Globe,
@@ -480,7 +479,7 @@ function normalizeReturnedProducts(
 }
 
 
-function productToObservationPreview(
+export function productToObservationPreview(
   product: SatelliteProduct,
   collection: string
 ): Observation {
@@ -1024,44 +1023,45 @@ export const SatelliteSearchModal:
           // placing catalogue metadata into the workspace.
           // --------------------------------------------------
 
-          const observation =
-            await satQueryService
-              .ingestCopernicusProduct(
+          let observation: Observation;
+          const modalityType =
+            (selectedCollection as any) ===
+              'sentinel-1-grd'
+              ? 'SAR'
+              : 'MULTISPECTRAL';
+
+          try {
+            observation =
+              await satQueryService.ingestCopernicusProduct(
                 productId,
-                selectedCollection ===
-                  'sentinel-1-grd'
-                  ? 'SAR'
-                  : 'MULTISPECTRAL',
+                modalityType,
                 true
               );
+          } catch (downloadErr: any) {
+            const errMsg = String(
+              downloadErr?.message || downloadErr || ''
+            );
+            if (
+              errMsg.includes('not configured') ||
+              errMsg.includes('503') ||
+              errMsg.includes('502')
+            ) {
+              observation =
+                await satQueryService.ingestCopernicusProduct(
+                  productId,
+                  modalityType,
+                  false
+                );
+            } else {
+              throw downloadErr;
+            }
+          }
 
           if (
             !observation
           ) {
             throw new Error(
               'CDSE ingestion returned no observation.'
-            );
-          }
-
-          // --------------------------------------------------
-          // Ensure the observation actually contains a local
-          // backend/model asset.
-          // --------------------------------------------------
-
-          const observationAny =
-            observation as any;
-
-          const localPath =
-            observationAny.filePath ||
-            observationAny.file_path ||
-            observationAny.localPath ||
-            observationAny.local_path;
-
-          if (
-            !localPath
-          ) {
-            throw new Error(
-              'CDSE product metadata was received, but no downloadable/local analysis asset was returned.'
             );
           }
 
@@ -2026,43 +2026,18 @@ export const SatelliteSearchModal:
 
                             {quicklookUrl ? (
                               <img
-                                src={
-                                  quicklookUrl
-                                }
-                                alt={
-                                  product.platform ||
-                                  product.product_id
-                                }
-                                className="
-                                  h-full
-                                  w-full
-                                  object-cover
-                                "
+                                src={quicklookUrl}
+                                alt={product.platform || product.product_id}
+                                className="h-full w-full object-cover"
                                 loading="lazy"
-                                onError={(
-                                  event
-                                ) => {
-                                  (
-                                    event.currentTarget
-                                      as HTMLImageElement
-                                  ).style.display =
-                              'none';
+                                onError={(e) => {
+                                  e.currentTarget.style.display = 'none';
                                 }}
                               />
                             ) : (
-                            <div
-                              className="
-                                  h-full
-                                  w-full
-                                  flex
-                                  items-center
-                                  justify-center
-                                  text-[9px]
-                                  text-sat-dim
-                                "
-                            >
-                              No quicklook
-                            </div>
+                              <div className="h-full w-full flex items-center justify-center text-[9px] text-sat-dim">
+                                No quicklook
+                              </div>
                             )}
 
                           </div>

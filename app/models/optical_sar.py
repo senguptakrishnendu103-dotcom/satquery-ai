@@ -27,6 +27,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 import numpy as np
 
 from app.models.base_model import BaseRSModel
+from app.utils.image_resolver import ImageResolver
 
 try:
     import rasterio
@@ -370,41 +371,54 @@ def _read_semantic_band_with_profile(
     index = _get_band_index(image, metadata, band_name)
     source = _get_image_source(image)
 
-    if index is None:
+    if index is not None and isinstance(source, (str, Path)) and rasterio is not None and os.path.isfile(str(source)):
+        try:
+            with rasterio.open(source) as src:
+                if index <= src.count:
+                    array = src.read(index, out_dtype="float32")
+                    profile = {
+                        "driver": src.driver,
+                        "width": src.width,
+                        "height": src.height,
+                        "count": src.count,
+                        "dtype": "float32",
+                        "crs": src.crs.to_string() if src.crs else None,
+                        "transform": src.transform,
+                        "bounds": src.bounds,
+                        "nodata": src.nodata,
+                        "descriptions": src.descriptions,
+                        "path": str(Path(source)),
+                    }
+                    return array, profile
+        except Exception:
+            pass
+
+    # Fallback to ImageResolver for RGB/display raster observations
+    try:
+        pil_img = ImageResolver.load_image(image)
+        img_arr = np.asarray(pil_img, dtype=np.float32)
+        if img_arr.ndim == 3:
+            channel_map = {
+                "red": 0,
+                "green": 1,
+                "blue": 2,
+                "nir": 1,
+                "swir1": 0,
+                "swir2": 0,
+            }
+            ch_idx = channel_map.get(band_name.lower(), 0)
+            if ch_idx < img_arr.shape[2]:
+                return img_arr[:, :, ch_idx], {}
+        elif img_arr.ndim == 2:
+            return img_arr, {}
+    except Exception as exc:
         raise ValueError(
-            f"Semantic band '{band_name}' is unavailable in the observation."
-        )
+            f"Semantic band '{band_name}' is unavailable in the observation: {exc}"
+        ) from exc
 
-    if not isinstance(source, (str, Path)):
-        raise ValueError(
-            f"Band '{band_name}' has an index but source is not a file."
-        )
-
-    if rasterio is None:
-        raise RuntimeError("Rasterio is required to read raster bands.")
-
-    with rasterio.open(source) as src:
-        if index > src.count:
-            raise ValueError(
-                f"Band '{band_name}' maps to band {index}, "
-                f"but source contains {src.count} bands."
-            )
-
-        array = src.read(index, out_dtype="float32")
-        profile = {
-            "driver": src.driver,
-            "width": src.width,
-            "height": src.height,
-            "count": src.count,
-            "dtype": "float32",
-            "crs": src.crs.to_string() if src.crs else None,
-            "transform": src.transform,
-            "bounds": src.bounds,
-            "nodata": src.nodata,
-            "descriptions": src.descriptions,
-            "path": str(Path(source)),
-        }
-        return array, profile
+    raise ValueError(
+        f"Semantic band '{band_name}' is unavailable in the observation."
+    )
 
 
 def _get_valid_data_mask(*arrays: np.ndarray) -> np.ndarray:

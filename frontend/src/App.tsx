@@ -116,6 +116,26 @@ function isDemoObservation(
 }
 
 
+function getObservationImageUrl(
+  observation: Observation
+): string | undefined {
+  const candidate =
+    observation as any;
+
+  return (
+    candidate.imageUrl ||
+    candidate.image_url ||
+    candidate.url ||
+    candidate.thumbnailUrl ||
+    candidate.thumbnail_url ||
+    candidate.metadata?.imageUrl ||
+    candidate.metadata?.image_url ||
+    candidate.metadata?.url ||
+    candidate.metadata?.thumbnailUrl ||
+    candidate.metadata?.thumbnail_url
+  );
+}
+
 function observationHasModelAsset(
   observation: Observation
 ): boolean {
@@ -138,6 +158,17 @@ function observationHasModelAsset(
     return true;
   }
 
+  const imageUrl =
+    getObservationImageUrl(
+      observation
+    );
+
+  if (
+    imageUrl
+  ) {
+    return true;
+  }
+
   const ingestionStatus =
     getObservationIngestionStatus(
       observation
@@ -147,7 +178,9 @@ function observationHasModelAsset(
     ingestionStatus === 'ready' ||
     ingestionStatus === 'downloaded' ||
     ingestionStatus === 'ingested' ||
-    ingestionStatus === 'local'
+    ingestionStatus === 'local' ||
+    ingestionStatus === 'metadata_only' ||
+    ingestionStatus === 'selected'
   );
 }
 

@@ -34,7 +34,7 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
 
   const [compareMode, setCompareMode] =
-    useState<'BEFORE' | 'AFTER' | 'CHANGE'>('CHANGE');
+    useState<'BEFORE' | 'AFTER' | 'CHANGE'>('BEFORE');
   const [wipePosition, setWipePosition] = useState(50);
   const [showOverlays, setShowOverlays] = useState(true);
   const [showGrid, setShowGrid] = useState(false);
@@ -52,6 +52,23 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
   const obsBefore = activeObsList[0] || null;
   const obsAfter = activeObsList[1] || activeObsList[0] || null;
   const isMultiObs = activeObsList.length >= 2;
+
+  const resultTask = String(activeResult?.task || '').toLowerCase();
+  const isChangeResult =
+    resultTask.includes('change') ||
+    resultTask.includes('temporal') ||
+    activeResult?.overlayType === 'change';
+
+  const visibleEvidence = (activeResult?.evidence || []).filter((region) => {
+    const label = `${region.label || ''} ${region.type || ''}`.toLowerCase();
+    const looksLikeChangeEvidence =
+      label.includes('change') ||
+      label.includes('delta') ||
+      label.includes('before') ||
+      label.includes('after');
+
+    return isChangeResult || !looksLikeChangeEvidence;
+  });
 
   const handleZoomIn = () => setZoom((prev) => Math.min(prev + 0.25, 3.5));
   const handleZoomOut = () => setZoom((prev) => Math.max(prev - 0.25, 0.75));
@@ -111,8 +128,8 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
               <button
                 onClick={() => setCompareMode('BEFORE')}
                 className={`rounded-lg px-3 py-2 text-xs font-medium transition-colors ${compareMode === 'BEFORE'
-                    ? 'bg-sat-panel text-sat-accent'
-                    : 'text-slate-400 hover:bg-sat-panel hover:text-slate-200'
+                  ? 'bg-sat-panel text-sat-accent'
+                  : 'text-slate-400 hover:bg-sat-panel hover:text-slate-200'
                   }`}
               >
                 Before
@@ -124,8 +141,8 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
               <button
                 onClick={() => setCompareMode('AFTER')}
                 className={`rounded-lg px-3 py-2 text-xs font-medium transition-colors ${compareMode === 'AFTER'
-                    ? 'bg-sat-panel text-sat-accent'
-                    : 'text-slate-400 hover:bg-sat-panel hover:text-slate-200'
+                  ? 'bg-sat-panel text-sat-accent'
+                  : 'text-slate-400 hover:bg-sat-panel hover:text-slate-200'
                   }`}
               >
                 After
@@ -137,8 +154,8 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
               <button
                 onClick={() => setCompareMode('CHANGE')}
                 className={`rounded-lg px-3 py-2 text-xs font-medium transition-colors ${compareMode === 'CHANGE'
-                    ? 'bg-sat-change text-slate-950'
-                    : 'text-slate-400 hover:bg-sat-panel hover:text-slate-200'
+                  ? 'bg-sat-change text-slate-950'
+                  : 'text-slate-400 hover:bg-sat-panel hover:text-slate-200'
                   }`}
               >
                 Compare changes
@@ -158,8 +175,8 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
             title={showOverlays ? 'Hide analysis areas' : 'Show analysis areas'}
             aria-label={showOverlays ? 'Hide analysis areas' : 'Show analysis areas'}
             className={`rounded-lg p-2 transition-colors ${showOverlays
-                ? 'bg-sat-panel text-sat-accent'
-                : 'text-slate-400 hover:bg-sat-panel hover:text-slate-200'
+              ? 'bg-sat-panel text-sat-accent'
+              : 'text-slate-400 hover:bg-sat-panel hover:text-slate-200'
               }`}
           >
             <Eye className="h-4 w-4" />
@@ -170,8 +187,8 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
             title={showGrid ? 'Hide map grid' : 'Show map grid'}
             aria-label={showGrid ? 'Hide map grid' : 'Show map grid'}
             className={`rounded-lg p-2 transition-colors ${showGrid
-                ? 'bg-sat-panel text-sat-accent'
-                : 'text-slate-400 hover:bg-sat-panel hover:text-slate-200'
+              ? 'bg-sat-panel text-sat-accent'
+              : 'text-slate-400 hover:bg-sat-panel hover:text-slate-200'
               }`}
           >
             <Crosshair className="h-4 w-4" />
@@ -213,7 +230,7 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
       </div>
 
       {/* Helpful context when comparing */}
-      {hasImages && isMultiObs && compareMode === 'CHANGE' && (
+      {hasImages && isMultiObs && compareMode === 'CHANGE' && isChangeResult && (
         <div className="pointer-events-none absolute left-1/2 top-20 z-20 -translate-x-1/2 rounded-full border border-sat-border bg-sat-surface/90 px-4 py-2 text-xs text-slate-300 shadow-lg backdrop-blur-md">
           Drag the slider below to see what changed
         </div>
@@ -289,7 +306,7 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
             </div>
 
             {/* Before/after wipe */}
-            {isMultiObs && compareMode === 'CHANGE' && (
+            {isMultiObs && compareMode === 'CHANGE' && isChangeResult && (
               <div
                 className="pointer-events-none absolute inset-0 overflow-hidden rounded-xl"
                 style={{
@@ -312,8 +329,8 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
 
             {/* Analysis areas */}
             {showOverlays &&
-              activeResult?.evidence &&
-              activeResult.evidence.map((region) => {
+              activeResult &&
+              visibleEvidence.map((region) => {
                 const isSelected = selectedRegionId === region.id;
 
                 return (
@@ -324,8 +341,8 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
                       onSelectRegion(isSelected ? null : region.id);
                     }}
                     className={`absolute z-20 cursor-pointer rounded-lg border-2 transition-all ${isSelected
-                        ? 'border-sat-change bg-sat-change/25 ring-4 ring-sat-change/30 shadow-lg scale-105'
-                        : 'border-sat-accent bg-sat-accent/15 hover:bg-sat-accent/25 hover:border-sky-300'
+                      ? 'border-sat-change bg-sat-change/25 ring-4 ring-sat-change/30 shadow-lg scale-105'
+                      : 'border-sat-accent bg-sat-accent/15 hover:bg-sat-accent/25 hover:border-sky-300'
                       }`}
                     style={{
                       left: `${region.coords.x}%`,
@@ -399,7 +416,7 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
       </div>
 
       {/* Before/after slider */}
-      {hasImages && isMultiObs && compareMode === 'CHANGE' && (
+      {hasImages && isMultiObs && compareMode === 'CHANGE' && isChangeResult && (
         <div className="z-20 border-t border-sat-border bg-sat-surface/95 px-5 py-3 backdrop-blur-md">
           <div className="mb-2 flex items-center justify-between text-xs">
             <span className="text-slate-400">

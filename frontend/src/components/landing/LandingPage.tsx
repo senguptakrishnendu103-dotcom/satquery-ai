@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowRight, Play, Radar, Cpu, Sparkles } from 'lucide-react';
+import { ArrowRight, Play, Radar, Cpu } from 'lucide-react';
 import { SystemWorkflowSection } from './SystemWorkflowSection';
 
 interface LandingPageProps {

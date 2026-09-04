@@ -166,7 +166,9 @@ export const DEMO_SCENARIOS: DemoScenario[] = [
         modelsUsed: ['Hydro-NDWI Water Segmentation Tool'],
         toolsExecuted: ['BandMathNDWI'],
         executionTimeMs: 1180,
+        telemetryId: 'SQ-TEL-DEMO-02',
         modelVersion: 'deterministic-raster-v1',
+        datasetVersion: 'v1.0'
       },
       replaySteps: [
         { phase: 'INPUTS', label: 'Multispectral Channel Extraction', timestamp: '00:00.080', details: 'Extracted Near-Infrared (B8) and Green (B3) spectral bands.', status: 'complete' },

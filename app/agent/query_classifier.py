@@ -654,11 +654,11 @@ class QueryClassifier:
         if query is None:
             return ""
 
-        # Collapse repeated whitespace while preserving the query meaning.
+        text = str(query).strip().strip('"').strip("'").strip()
         return re.sub(
             r"\s+",
             " ",
-            str(query),
+            text,
         ).strip().lower()
 
     @staticmethod

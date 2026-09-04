@@ -91,7 +91,6 @@ class AgentOrchestrator:
     CATALOGUE_ONLY_SOURCE_STATES = {
         "catalogue_only",
         "search_only",
-        "metadata_only",
     }
 
     READY_SOURCE_STATES = {
@@ -687,8 +686,11 @@ class AgentOrchestrator:
                     "multi-spectral",
                     "ms",
                 }:
+                    # Sentinel-2 multispectral observations are routed
+                    # through the optical VLM/model contract unless a
+                    # dedicated multispectral specialist is registered.
                     normalized_modality = (
-                        "multispectral"
+                        "optical"
                     )
 
                 elif normalized_modality in {
@@ -860,93 +862,70 @@ class AgentOrchestrator:
                 continue
 
             # ----------------------------------------------------
-            # Catalogue-only observations cannot be analyzed.
-            # ----------------------------------------------------
-
-            if (
-                ingestion_status
-                in self.CATALOGUE_ONLY_SOURCE_STATES
-            ):
-
-                product_id = (
-                    image.get(
-                        "product_id"
-                    )
-                    or image.get(
-                        "id"
-                    )
-                    or image.get(
-                        "filename"
-                    )
-                    or "unknown"
-                )
-
-                raise ValueError(
-                    "Observation "
-                    f"{index + 1} is catalogue metadata only "
-                    f"({product_id}). "
-                    "Ingest/download the product before "
-                    "running analysis."
-                )
-
-            # ----------------------------------------------------
             # Search results must not be mistaken for data.
             # ----------------------------------------------------
 
-            if (
-                image.get(
-                    "provider"
-                )
-                and
-                image.get(
-                    "product_id"
-                )
-                and not image.get(
-                    "file_path"
-                )
-                and not image.get(
-                    "local_path"
-                )
-                and ingestion_status
-                not in self.READY_SOURCE_STATES
-            ):
-
-                raise ValueError(
-                    "The selected satellite product has metadata "
-                    "but no local analysis asset. "
-                    "Download or ingest the product first."
-                )
-
             # ----------------------------------------------------
-            # Physical file.
+            # Physical model asset.
             # ----------------------------------------------------
 
             local_path = (
                 image.get("file_path")
+                or image.get("filePath")
                 or image.get("local_path")
+                or image.get("localPath")
+                or image.get("image_path")
+                or image.get("image_url")
+                or image.get("imageUrl")
+                or image.get("quicklook_url")
+                or image.get("url")
+                or image.get("path")
             )
 
             if not local_path:
                 analysis_asset = image.get("analysis_asset")
                 if isinstance(analysis_asset, dict):
-                    local_path = analysis_asset.get("path")
+                    local_path = analysis_asset.get("path") or analysis_asset.get("url")
+                elif isinstance(analysis_asset, str):
+                    local_path = analysis_asset
+
+            remote_analysis_asset = (
+                image.get("remote_analysis_asset")
+                or image.get("analysis_asset_url")
+                or image.get("remote_asset_url")
+            )
+            if not local_path and remote_analysis_asset:
+                local_path = str(remote_analysis_asset)
 
             if not local_path:
                 raise ValueError(
-                    "Observation "
-                    f"{index + 1} has no model-readable "
-                    "file_path/local_path/analysis_asset."
+                    f"Observation {index + 1} has no model-readable image or raster asset."
                 )
 
-            if not os.path.isfile(str(local_path)):
-                raise ValueError(
-                    "Observation "
-                    f"{index + 1} references a file that "
-                    f"does not exist: {local_path}"
-                )
-
-            image["file_path"] = str(local_path)
-            image["local_path"] = str(local_path)
+            if isinstance(local_path, str) and (
+                local_path.startswith("http://")
+                or local_path.startswith("https://")
+                or local_path.startswith("/api/")
+                or local_path.startswith("data:image/")
+            ):
+                # Remote analysis URLs are preserved for an explicit model
+                # adapter to resolve; static quicklooks are not upgraded to
+                # model assets implicitly.
+                image["file_path"] = str(local_path)
+                image["local_path"] = str(local_path)
+            elif not os.path.isfile(str(local_path)):
+                cand = (STATIC_DIR / str(local_path).lstrip("/\\")).resolve()
+                if cand.exists() and cand.is_file():
+                    image["file_path"] = str(cand)
+                    image["local_path"] = str(cand)
+                else:
+                    raise ValueError(
+                        "Observation "
+                        f"{index + 1} points to a missing analysis asset: {local_path}"
+                    )
+            else:
+                image["file_path"] = str(local_path)
+                image["local_path"] = str(local_path)
 
     # ============================================================
     # MODEL INPUT VALIDATION

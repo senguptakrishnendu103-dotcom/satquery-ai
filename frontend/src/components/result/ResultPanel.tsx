@@ -62,6 +62,26 @@ export const ResultPanel: React.FC<ResultPanelProps> = ({
   const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
   const [exportFeedback, setExportFeedback] = useState<string | null>(null);
 
+  const isVerified =
+    result.status === 'COMPLETE' &&
+    Boolean(result.executionSummary?.task) &&
+    Array.isArray(result.executionSummary?.modelsUsed) &&
+    result.executionSummary.modelsUsed.length > 0;
+
+  const formattedInputs =
+    (result.executionSummary?.inputs || [])
+      .map((input: any) =>
+        typeof input === 'string'
+          ? input
+          : input?.filename ||
+          input?.name ||
+          input?.product_id ||
+          input?.productId ||
+          'Unknown input'
+      )
+      .filter(Boolean)
+      .join(', ') || 'N/A';
+
   const executionId = useMemo(
     () =>
       result.executionSummary?.telemetryId ||
@@ -181,7 +201,7 @@ export const ResultPanel: React.FC<ResultPanelProps> = ({
         (input, index) => `
           <div class="dataset">
             <span class="index">0${index + 1}</span>
-            <span>${escapeHtml(input)}</span>
+            <span>${escapeHtml(typeof input === 'string' ? input : (input?.filename || input?.name || ''))}</span>
           </div>
         `
       )
@@ -560,7 +580,7 @@ export const ResultPanel: React.FC<ResultPanelProps> = ({
 
                 <div class="card">
                   <div class="label">Result status</div>
-                  <div class="value">${escapeHtml(result.executionSummary?.telemetryId ? 'VERIFIED' : 'COMPLETE')}</div>
+                  <div class="value">${escapeHtml(isVerified ? 'VERIFIED' : 'NOT VERIFIED')}</div>
                 </div>
               </div>
             </section>
@@ -1026,17 +1046,17 @@ export const ResultPanel: React.FC<ResultPanelProps> = ({
                 </div>
 
                 <span
-                  className="
+                  className={`
                     rounded
-                    border border-sat-stable/20
-                    bg-sat-stable/5
                     px-1.5 py-0.5
                     font-mono
                     text-[8px]
-                    text-sat-stable
-                  "
+                    ${isVerified
+                      ? 'border border-sat-stable/20 bg-sat-stable/5 text-sat-stable'
+                      : 'border border-sat-change/20 bg-sat-change/5 text-sat-change'}
+                  `}
                 >
-                  VERIFIED
+                  {isVerified ? 'VERIFIED' : 'NOT VERIFIED'}
                 </span>
               </div>
 
@@ -1482,7 +1502,7 @@ export const ResultPanel: React.FC<ResultPanelProps> = ({
                   <AuditRow
                     icon={<Database className="h-3 w-3" />}
                     label="INPUTS"
-                    value={result.executionSummary.inputs.join(', ')}
+                    value={formattedInputs}
                   />
 
                   <AuditRow
@@ -1497,7 +1517,7 @@ export const ResultPanel: React.FC<ResultPanelProps> = ({
                   <AuditRow
                     icon={<Radio className="h-3 w-3" />}
                     label="TELEMETRY"
-                    value={result.executionSummary.telemetryId}
+                    value={result.executionSummary.telemetryId || 'N/A'}
                   />
 
                   <AuditRow
@@ -1527,8 +1547,17 @@ export const ResultPanel: React.FC<ResultPanelProps> = ({
                           text-sat-stable
                         "
                       >
-                        <CheckCircle2 className="h-3 w-3" />
-                        VERIFIED
+                        {isVerified ? (
+                          <>
+                            <CheckCircle2 className="h-3 w-3" />
+                            VERIFIED
+                          </>
+                        ) : (
+                          <>
+                            <span className="h-1.5 w-1.5 rounded-full bg-sat-change" />
+                            NOT VERIFIED
+                          </>
+                        )}
                       </span>
                     </div>
                   </div>

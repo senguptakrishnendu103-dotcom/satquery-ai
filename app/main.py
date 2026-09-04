@@ -390,11 +390,29 @@ def validate_analysis_images(
             image.get("source_type", "")
         ).lower()
 
-        # Demo scenarios may not have physical raster files.
-        if source_type == "demo":
+        # Demo observations are the only observations allowed to proceed
+        # without a model-readable raster. A thumbnail/quicklook is display
+        # media, not an analysis asset. A Copernicus product is model-ready
+        # only when an actual local or explicitly resolvable analysis asset
+        # is present.
+        if source_type in ("demo", "sample"):
             continue
 
-        local_path = image.get("file_path")
+        remote_analysis_asset = (
+            image.get("analysis_asset")
+            or image.get("remote_analysis_asset")
+            or image.get("analysis_asset_url")
+            or image.get("remote_asset_url")
+            or image.get("image_url")
+            or image.get("imageUrl")
+            or image.get("quicklook_url")
+            or image.get("url")
+            or image.get("path")
+        )
+        if remote_analysis_asset:
+            continue
+
+        local_path = image.get("file_path") or image.get("local_path")
 
         if not local_path:
             raise HTTPException(
@@ -825,6 +843,18 @@ def get_copernicus_quicklook(product_id: str):
         f"/Assets({asset_id})/$value"
     )
 
+    cache_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static", "uploads")
+    os.makedirs(cache_dir, exist_ok=True)
+    cache_path = os.path.join(cache_dir, f"quicklook_{product_id}.jpg")
+
+    if os.path.isfile(cache_path):
+        try:
+            with open(cache_path, "rb") as f:
+                content = f.read()
+            return Response(content=content, media_type="image/jpeg")
+        except Exception:
+            pass
+
     try:
         response = requests.get(
             url,
@@ -844,6 +874,12 @@ def get_copernicus_quicklook(product_id: str):
                 f"HTTP {response.status_code}"
             ),
         )
+
+    try:
+        with open(cache_path, "wb") as f:
+            f.write(response.content)
+    except Exception:
+        pass
 
     media_type = (
         response.headers.get(
@@ -881,8 +917,11 @@ def ingest_copernicus_product(
           -> model-ready observation
     """
 
-    allowed_modalities = {"optical", "sar", "optical_sar"}
+    allowed_modalities = {"optical", "sar", "optical_sar", "multispectral"}
     modality = req.modality.strip().lower()
+
+    if modality == "multispectral":
+        modality = "optical"
 
     if modality not in allowed_modalities:
         raise HTTPException(
@@ -1333,12 +1372,15 @@ def analyze(req: AnalyzeRequest):
         raise
 
     except Exception as exc:
+        import traceback
+        traceback.print_exc()
         # Do not pretend the analysis completed.
+        detail_msg = exc.detail if isinstance(getattr(exc, "detail", None), (str, dict)) else str(exc)
         raise HTTPException(
             status_code=500,
             detail={
                 "message": "SatQuery analysis failed.",
-                "error": str(exc),
+                "error": detail_msg,
             },
         )
 

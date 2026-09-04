@@ -604,11 +604,11 @@ export interface ExecutionSummary {
   executionTimeMs?: number;
 
 
-  telemetryId: string;
+  telemetryId?: string;
 
-  modelVersion: string;
+  modelVersion?: string;
 
-  datasetVersion: string;
+  datasetVersion?: string;
 
 
   // ----------------------------------------------------------

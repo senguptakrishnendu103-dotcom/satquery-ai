@@ -3,9 +3,9 @@ import type {
   AnalysisResult,
   QueryHistoryItem,
   ModalityType,
+  ExecutionInput,
 } from '../types/satquery';
 
-import { DEMO_SCENARIOS } from '../data/demoScenarios';
 
 
 // ============================================================
@@ -126,11 +126,10 @@ type ServiceStepCallback = (
 // SESSION STATE
 // ============================================================
 
-// Keep demo initialization for the existing application behavior.
-// Real uploaded/CDSE observations are inserted ahead of demos.
-let userObservations: Observation[] = [
-  ...DEMO_SCENARIOS[2].observations,
-];
+// Keep the live workspace empty. Demo observations are loaded only when
+// the user explicitly selects a demo scenario. This prevents demo/change
+// observations from appearing in a real CDSE analysis session.
+let userObservations: Observation[] = [];
 
 
 // Session history populated by backend responses.
@@ -231,14 +230,21 @@ function getBackendError(
     .json()
     .catch(() => ({}))
     .then((data) => {
-      const detail =
-        isRecord(data) &&
-          typeof data.detail === 'string'
-          ? data.detail
-          : null;
+      let detailMessage: string | null = null;
+      if (isRecord(data)) {
+        if (typeof data.detail === 'string') {
+          detailMessage = data.detail;
+        } else if (isRecord(data.detail)) {
+          detailMessage =
+            (typeof data.detail.error === 'string' ? data.detail.error : null) ||
+            (typeof data.detail.message === 'string' ? data.detail.message : null);
+        } else if (typeof data.message === 'string') {
+          detailMessage = data.message;
+        }
+      }
 
       return new Error(
-        detail ||
+        detailMessage ||
         fallback ||
         `Request failed with HTTP ${response.status}`
       );
@@ -455,6 +461,26 @@ function observationToBackendPayload(
       candidate.metadata?.productId ||
       candidate.metadata?.product_id,
 
+    analysis_asset:
+      candidate.analysis_asset ||
+      candidate.metadata?.analysis_asset,
+
+    remote_analysis_asset:
+      candidate.remote_analysis_asset ||
+      candidate.metadata?.remote_analysis_asset,
+
+    analysis_asset_url:
+      candidate.analysis_asset_url ||
+      candidate.metadata?.analysis_asset_url,
+
+    remote_asset_url:
+      candidate.remote_asset_url ||
+      candidate.metadata?.remote_asset_url,
+
+    assets:
+      candidate.assets ||
+      candidate.metadata?.assets,
+
     sensor:
       sensor,
 
@@ -486,7 +512,7 @@ function normalizeModalityForBackend(
     value === 'multi-spectral' ||
     value === 'ms'
   ) {
-    return 'multispectral';
+    return 'optical';
   }
 
   return 'optical';
@@ -660,12 +686,12 @@ function backendToAnalysisResult(
         0
       );
 
-  const executionInputs =
+  const executionInputs: Array<string | ExecutionInput> =
     Array.isArray(
       backendData.execution_summary
         ?.inputs
     )
-      ? backendData.execution_summary!.inputs!
+      ? (backendData.execution_summary!.inputs! as Array<string | ExecutionInput>)
       : activeObservations.map(
         (
           observation
@@ -766,8 +792,14 @@ function backendToAnalysisResult(
       'Remote-Sensing Analysis Complete',
 
     answer:
-      backendData.answer ||
-      'The analysis backend returned no textual answer.',
+      typeof backendData.answer === 'string' &&
+        backendData.answer.trim()
+        ? backendData.answer
+        : (() => {
+          throw new Error(
+            'Analysis backend returned no textual answer.'
+          );
+        })(),
 
     changePercentage:
       deriveChangePercentage(
@@ -1305,95 +1337,45 @@ export const satQueryService = {
     // These are status notifications, NOT fake analysis.
     // --------------------------------------------------------
 
-    onStepUpdate?.(
-      0,
-      ANALYSIS_STEPS[0]
-    );
+    const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-    const inputMode =
-      determineInputMode(
-        activeObservations
-      );
+    onStepUpdate?.(0, ANALYSIS_STEPS[0]);
+    const inputMode = determineInputMode(activeObservations);
+    await delay(150);
 
-    // --------------------------------------------------------
-    // Validate observations locally before contacting backend.
-    // --------------------------------------------------------
+    onStepUpdate?.(1, ANALYSIS_STEPS[1]);
+    validateFrontendObservations(activeObservations, inputMode);
+    await delay(150);
 
-    onStepUpdate?.(
-      1,
-      ANALYSIS_STEPS[1]
-    );
+    onStepUpdate?.(2, ANALYSIS_STEPS[2]);
+    await delay(150);
 
-    validateFrontendObservations(
-      activeObservations,
-      inputMode
-    );
+    onStepUpdate?.(3, ANALYSIS_STEPS[3]);
+    await delay(150);
 
-    onStepUpdate?.(
-      2,
-      ANALYSIS_STEPS[2]
-    );
+    const backendImages = activeObservations.map(observationToBackendPayload);
 
-    onStepUpdate?.(
-      3,
-      ANALYSIS_STEPS[3]
-    );
+    onStepUpdate?.(4, ANALYSIS_STEPS[4]);
 
-    // --------------------------------------------------------
-    // Build REAL backend observation payloads.
-    // --------------------------------------------------------
-
-    const backendImages =
-      activeObservations.map(
-        observationToBackendPayload
-      );
-
-    // --------------------------------------------------------
-    // Execute REAL backend analysis.
-    // --------------------------------------------------------
-
-    onStepUpdate?.(
-      4,
-      ANALYSIS_STEPS[4]
-    );
-
-    let backendData:
-      BackendAnalysisResponse;
+    let backendData: BackendAnalysisResponse;
 
     try {
-
-      backendData =
-        await fetchJson<BackendAnalysisResponse>(
-          '/api/analyze',
-          {
-            method:
-              'POST',
-
-            headers: {
-              'Content-Type':
-                'application/json',
-            },
-
-            body:
-              JSON.stringify({
-                query,
-
-                input_mode:
-                  inputMode,
-
-                images:
-                  backendImages,
-              }),
-          }
-        );
-
-    } catch (error) {
-
-      console.error(
-        'SatQuery backend analysis failed:',
-        error
+      backendData = await fetchJson<BackendAnalysisResponse>(
+        '/api/analyze',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            query,
+            input_mode: inputMode,
+            images: backendImages,
+          }),
+        }
       );
-
+    } catch (error) {
+      console.error('SatQuery backend analysis failed:', error);
       throw new Error(
         error instanceof Error
           ? error.message
@@ -1401,39 +1383,24 @@ export const satQueryService = {
       );
     }
 
-    if (
-      backendData.error
-    ) {
+    if (backendData.error) {
       throw new Error(
         backendData.message ||
         'SatQuery backend reported an analysis error.'
       );
     }
 
-    // --------------------------------------------------------
-    // Evidence stage.
-    // --------------------------------------------------------
+    onStepUpdate?.(5, ANALYSIS_STEPS[5]);
+    await delay(150);
 
-    onStepUpdate?.(
-      5,
-      ANALYSIS_STEPS[5]
+    const result = backendToAnalysisResult(
+      backendData,
+      query,
+      activeObservations
     );
 
-    const result =
-      backendToAnalysisResult(
-        backendData,
-        query,
-        activeObservations
-      );
-
-    // --------------------------------------------------------
-    // Finalization stage.
-    // --------------------------------------------------------
-
-    onStepUpdate?.(
-      6,
-      ANALYSIS_STEPS[6]
-    );
+    onStepUpdate?.(6, ANALYSIS_STEPS[6]);
+    await delay(150);
 
     // --------------------------------------------------------
     // Store successful backend result.
@@ -1880,26 +1847,37 @@ function validateFrontendObservations(
     }
 
     const filePath =
-      getObservationFilePath(
-        observation
-      );
+      getObservationFilePath(observation) ||
+      (observation as any).file_path ||
+      (observation as any).filePath ||
+      (observation as any).local_path ||
+      (observation as any).image_url ||
+      (observation as any).imageUrl ||
+      (observation as any).quicklook_url ||
+      (observation as any).url;
 
-    if (!filePath) {
-      if (
-        ingestionStatus ===
-        'catalogue_only' ||
-        ingestionStatus ===
-        'metadata_only'
-      ) {
+    const candidate = observation as any;
+    const hasAnalysisAsset = Boolean(
+      filePath ||
+      candidate.analysis_asset ||
+      candidate.remote_analysis_asset ||
+      candidate.analysis_asset_url ||
+      candidate.remote_asset_url ||
+      candidate.metadata?.analysis_asset ||
+      candidate.metadata?.remote_analysis_asset ||
+      candidate.metadata?.analysis_asset_url ||
+      candidate.metadata?.remote_asset_url
+    );
+
+    if (!hasAnalysisAsset) {
+      if (ingestionStatus === 'catalogue_only') {
         throw new Error(
-          `Observation "${observation.name}" is catalogue metadata only. ` +
-          `Ingest/download the satellite product before analysis.`
+          `Observation "${observation.name}" is catalogue-only and has no image URL or raster asset.`
         );
       }
 
       throw new Error(
-        `Observation "${observation.name}" is not connected to a ` +
-        `backend analysis file. Re-upload or ingest it first.`
+        `Observation "${observation.name}" is not connected to a readable image asset. Re-ingest it first.`
       );
     }
   }
@@ -1987,8 +1965,29 @@ function normalizeCDSEObservation(
         ? 'READY'
         : 'READY',
 
+
     metadata: {
       ...metadata,
+
+      analysis_asset:
+        raw.analysis_asset ||
+        metadata.analysis_asset,
+
+      remote_analysis_asset:
+        raw.remote_analysis_asset ||
+        metadata.remote_analysis_asset,
+
+      analysis_asset_url:
+        raw.analysis_asset_url ||
+        metadata.analysis_asset_url,
+
+      remote_asset_url:
+        raw.remote_asset_url ||
+        metadata.remote_asset_url,
+
+      assets:
+        raw.assets ||
+        metadata.assets,
 
       sensor:
         raw.sensor ||
