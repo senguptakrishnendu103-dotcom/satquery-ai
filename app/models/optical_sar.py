@@ -398,11 +398,14 @@ def _read_semantic_band_with_profile(
         pil_img = ImageResolver.load_image(image)
         img_arr = np.asarray(pil_img, dtype=np.float32)
         if img_arr.ndim == 3:
+            # For RGB display quicklooks:
+            # Map NIR to channel 0 (Red) so NDWI = (Green - NIR) / (Green + NIR)
+            # evaluates to (Green - Red) / (Green + Red), giving positive NDWI for water.
             channel_map = {
                 "red": 0,
                 "green": 1,
                 "blue": 2,
-                "nir": 1,
+                "nir": 0,
                 "swir1": 0,
                 "swir2": 0,
             }
@@ -1022,13 +1025,13 @@ class WaterBodyDetectionTool(BaseRSModel):
         if value is None:
             value = os.getenv(
                 "SATQUERY_NDWI_THRESHOLD",
-                "0.30",
+                "0.05",
             )
 
         try:
             numeric = float(value)
         except (TypeError, ValueError):
-            numeric = 0.30
+            numeric = 0.05
 
         if not -1.0 <= numeric <= 1.0:
             raise ValueError(

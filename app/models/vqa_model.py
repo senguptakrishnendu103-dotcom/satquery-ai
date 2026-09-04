@@ -557,16 +557,16 @@ class RemoteSensingVQAModel(BaseRSModel):
             
             # 1. Excess Greenness Index (ExG = 2G - R - B) -> Vegetation
             exg = (2.0 * g) - r - b
-            veg_mask = (exg > 15.0) & (g > r)
+            veg_mask = (exg > 10.0) & (g > r)
             veg_pct = float((np.sum(veg_mask) / total_pixels) * 100.0)
             
-            # 2. Water index estimate
-            water_idx = (b - r) / (b + r + 1e-5)
-            water_mask = (water_idx > 0.12) & (b > 35) & (g > b * 0.75) & (r < 110)
+            # 2. Water index estimate (NDWI_RGB = (Green - Red)/(Green + Red))
+            ndwi_rgb = (g - r) / (g + r + 1e-5)
+            water_mask = ((ndwi_rgb > -0.02) | (b > r * 1.05)) & (r < 130) & (~veg_mask)
             water_pct = float((np.sum(water_mask) / total_pixels) * 100.0)
             
             # 3. Bright / Cloud / Albedo mask
-            cloud_mask = (r > 210) & (g > 210) & (b > 210) & (np.abs(r - g) < 25) & (np.abs(g - b) < 25)
+            cloud_mask = (r > 200) & (g > 200) & (b > 200) & (np.abs(r - g) < 25) & (np.abs(g - b) < 25)
             cloud_pct = float((np.sum(cloud_mask) / total_pixels) * 100.0)
             
             # 4. Built-up / Barren land estimate
