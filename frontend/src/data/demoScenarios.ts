@@ -153,49 +153,20 @@ export const DEMO_SCENARIOS: DemoScenario[] = [
     presetResult: {
       id: 'res-dem-202',
       queryText: 'Find the water body and measure current surface area',
-      task: 'NDWI Water Index Grounding & Surface Measurement',
-      models: ['SatQuery-Hydro-NDWI', 'SegmentAnything-Geo'],
+      task: 'WATER_DETECTION',
+      models: ['Hydro-NDWI Water Segmentation Tool'],
       status: 'COMPLETE',
-      confidence: 96,
-      headline: 'Water Surface Area: 412.6 km² Detected',
-      answer: 'Normalized Difference Water Index (NDWI) segmentation successfully identified the reservoir water body. Active surface area measures 412.6 km², reflecting a minor seasonal drawdown of 3.1% relative to spring maximum.',
-      evidence: [
-        {
-          id: 'reg-201',
-          label: 'Primary Water Basin',
-          coords: { x: 18, y: 22, width: 58, height: 60 },
-          areaEstimate: '388.2 km²',
-          confidence: 98,
-          type: 'water',
-          description: 'Deepwater lacustrine zone with clear NDWI spectral reflectance signature.',
-          metrics: [
-            { label: 'Mean NDWI', value: '+0.74' },
-            { label: 'Turbidity', value: 'Low (< 2.1 NTU)' }
-          ]
-        },
-        {
-          id: 'reg-202',
-          label: 'Exposed Shallow Delta',
-          coords: { x: 68, y: 15, width: 22, height: 35 },
-          areaEstimate: '24.4 km²',
-          confidence: 91,
-          type: 'change',
-          description: 'Exposed sediment flats resulting from upstream flow control.',
-          metrics: [
-            { label: 'Moisture', value: '14%' },
-            { label: 'Substrate', value: 'Silicate Sand' }
-          ]
-        }
-      ],
+      confidence: 95,
+      headline: 'NDWI Water Segmentation',
+      answer: 'NDWI water extraction completed using Green (B03) and NIR (B08) spectral channels.',
+      evidence: [],
       executionSummary: {
-        task: 'Multispectral NDWI Surface Grounding',
+        task: 'WATER_DETECTION',
         inputs: ['multispectral_lake_res_2026.tif'],
-        modelsUsed: ['SatQuery-Hydro-NDWI', 'SegmentAnything-Geo'],
-        toolsExecuted: ['BandMathNDWI', 'PolygonExtractor', 'AreaCalculator'],
+        modelsUsed: ['Hydro-NDWI Water Segmentation Tool'],
+        toolsExecuted: ['BandMathNDWI'],
         executionTimeMs: 1180,
-        telemetryId: 'SQ-TEL-20260901-0094',
-        modelVersion: 'v2.4.1-hydro',
-        datasetVersion: 'Sentinel2-MSI-2026.8'
+        modelVersion: 'deterministic-raster-v1',
       },
       replaySteps: [
         { phase: 'INPUTS', label: 'Multispectral Channel Extraction', timestamp: '00:00.080', details: 'Extracted Near-Infrared (B8) and Green (B3) spectral bands.', status: 'complete' },

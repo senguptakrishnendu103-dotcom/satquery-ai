@@ -1,7 +1,24 @@
-import { useState, useEffect, useRef } from 'react';
-import type { ActiveView, Observation, AnalysisResult, QueryHistoryItem, DemoScenario, ModalityType } from './types/satquery';
+import {
+  useState,
+  useEffect,
+  useRef,
+} from 'react';
+
+import type {
+  ActiveView,
+  Observation,
+  AnalysisResult,
+  QueryHistoryItem,
+  DemoScenario,
+  ModalityType,
+} from './types/satquery';
+
 import { DEMO_SCENARIOS } from './data/demoScenarios';
-import { satQueryService } from './services/satQueryService';
+
+import {
+  satQueryService,
+} from './services/satQueryService';
+
 import { HeaderBar } from './components/navigation/HeaderBar';
 import { LandingPage } from './components/landing/LandingPage';
 import { ObservationPanel } from './components/observation/ObservationPanel';
@@ -17,374 +34,1769 @@ import { SettingsModal } from './components/settings/SettingsModal';
 import { LiveSpaceBackground } from './components/background/LiveSpaceBackground';
 
 
+// ============================================================
+// HELPERS
+// ============================================================
+
+function getObservationFilePath(
+  observation: Observation
+): string | undefined {
+  const candidate =
+    observation as any;
+
+  return (
+    candidate.filePath ||
+    candidate.file_path ||
+    candidate.localPath ||
+    candidate.local_path ||
+    candidate.metadata?.filePath ||
+    candidate.metadata?.file_path
+  );
+}
+
+
+function getObservationSourceType(
+  observation: Observation
+): string | undefined {
+  const candidate =
+    observation as any;
+
+  return (
+    candidate.sourceType ||
+    candidate.source_type ||
+    candidate.metadata?.sourceType ||
+    candidate.metadata?.source_type
+  );
+}
+
+
+function getObservationIngestionStatus(
+  observation: Observation
+): string | undefined {
+  const candidate =
+    observation as any;
+
+  return (
+    candidate.ingestionStatus ||
+    candidate.ingestion_status ||
+    candidate.metadata?.ingestionStatus ||
+    candidate.metadata?.ingestion_status
+  );
+}
+
+
+function getObservationProductId(
+  observation: Observation
+): string | undefined {
+  const candidate =
+    observation as any;
+
+  return (
+    candidate.productId ||
+    candidate.product_id ||
+    candidate.metadata?.productId ||
+    candidate.metadata?.product_id
+  );
+}
+
+
+function isDemoObservation(
+  observation: Observation
+): boolean {
+  const sourceType =
+    getObservationSourceType(
+      observation
+    );
+
+  return (
+    observation.isDemo === true ||
+    sourceType === 'demo' ||
+    sourceType === 'sample'
+  );
+}
+
+
+function observationHasModelAsset(
+  observation: Observation
+): boolean {
+  if (
+    isDemoObservation(
+      observation
+    )
+  ) {
+    return true;
+  }
+
+  const filePath =
+    getObservationFilePath(
+      observation
+    );
+
+  if (
+    filePath
+  ) {
+    return true;
+  }
+
+  const ingestionStatus =
+    getObservationIngestionStatus(
+      observation
+    );
+
+  return (
+    ingestionStatus === 'ready' ||
+    ingestionStatus === 'downloaded' ||
+    ingestionStatus === 'ingested' ||
+    ingestionStatus === 'local'
+  );
+}
+
+
+function normalizeModality(
+  modality: unknown
+): ModalityType {
+  const value =
+    String(
+      modality ||
+      'OPTICAL'
+    )
+      .trim()
+      .toUpperCase();
+
+  if (
+    value === 'SAR' ||
+    value === 'RADAR'
+  ) {
+    return 'SAR';
+  }
+
+  if (
+    value === 'MULTISPECTRAL' ||
+    value === 'MULTI-SPECTRAL' ||
+    value === 'MS'
+  ) {
+    return 'MULTISPECTRAL';
+  }
+
+  if (
+    value === 'THERMAL'
+  ) {
+    return 'THERMAL';
+  }
+
+  return 'OPTICAL';
+}
+
+
+// ============================================================
+// APP
+// ============================================================
+
 export function App() {
-  // Navigation State (Default to LANDING overview page upon page refresh)
-  const [activeView, setActiveView] = useState<ActiveView>('LANDING');
-  const [isSearchModalOpen, setIsSearchModalOpen] = useState<boolean>(false);
-  const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
 
-  // Theme State ('dark' | 'light') - Default to Cozy Warm White Theme
-  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
-    const saved = localStorage.getItem('satquery_theme');
-    return saved === 'dark' ? 'dark' : 'light';
-  });
+  // ==========================================================
+  // NAVIGATION
+  // ==========================================================
 
-  useEffect(() => {
-    localStorage.setItem('satquery_theme', theme);
-    const root = document.documentElement;
-    if (theme === 'light') {
-      root.classList.add('light');
-      root.classList.remove('dark');
-    } else {
-      root.classList.add('dark');
-      root.classList.remove('light');
-    }
-  }, [theme]);
-
-  const handleToggleTheme = () => {
-    setTheme(prev => (prev === 'dark' ? 'light' : 'dark'));
-  };
-
-  // Observations State (Defaulting to Demo 03: Bi-temporal change)
-  const [observations, setObservations] = useState<Observation[]>(DEMO_SCENARIOS[2].observations);
-  const [activeObservationIds, setActiveObservationIds] = useState<string[]>(
-    DEMO_SCENARIOS[2].observations.map(o => o.id)
+  const [
+    activeView,
+    setActiveView,
+  ] = useState<ActiveView>(
+    'LANDING'
   );
 
-  // Analysis Result & Evidence Inspection State
-  const [activeResult, setActiveResult] = useState<AnalysisResult | null>(DEMO_SCENARIOS[2].presetResult);
-  const [selectedRegionId, setSelectedRegionId] = useState<string | null>(null);
+  const [
+    isSearchModalOpen,
+    setIsSearchModalOpen,
+  ] = useState<boolean>(
+    false
+  );
 
-  // Agent Orchestration & Execution Animation State
-  const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
-  const [analysisStepIndex, setAnalysisStepIndex] = useState<number>(0);
-  const [analysisStepLabel, setAnalysisStepLabel] = useState<string>('');
-  const [currentQueryText, setCurrentQueryText] = useState<string>('');
+  const [
+    isSettingsOpen,
+    setIsSettingsOpen,
+  ] = useState<boolean>(
+    false
+  );
 
-  // Modals & History State
-  const [isReplayOpen, setIsReplayOpen] = useState<boolean>(false);
-  const [isDemoModalOpen, setIsDemoModalOpen] = useState<boolean>(false);
-  const [currentDemoId, setCurrentDemoId] = useState<string>('demo-03');
-  const [historyItems, setHistoryItems] = useState<QueryHistoryItem[]>([]);
 
-  // Workspace Simplification State
-  // The Observation panel now lives in a slide-over drawer, closed by
-  // default, so a new user sees just "the map" and "the question box"
-  // instead of three permanently-competing columns.
-  const [isObservationDrawerOpen, setIsObservationDrawerOpen] = useState<boolean>(false);
+  // ==========================================================
+  // THEME
+  // ==========================================================
 
-  // Workflow section ref for smooth scrolling to Landing overview page bottom
-  const workflowRef = useRef<HTMLDivElement>(null);
-  const handleScrollToWorkflow = () => {
-    if (activeView !== 'LANDING') {
-      setActiveView('LANDING');
-      setTimeout(() => {
-        workflowRef.current?.scrollIntoView({ behavior: 'smooth' });
-      }, 100);
-    } else {
-      workflowRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }
-  };
-
-  // Load initial history
-  useEffect(() => {
-    satQueryService.getHistory().then(setHistoryItems);
-  }, []);
-
-  // Handle Observation Select / Deselect
-  const handleToggleObservation = (id: string) => {
-    setActiveObservationIds(prev => {
-      if (prev.includes(id)) {
-        // Prevent removing all
-        if (prev.length === 1) return prev;
-        return prev.filter(i => i !== id);
-      } else {
-        return [...prev, id];
-      }
-    });
-  };
-
-  // Handle Custom User Upload
-  const handleAddObservation = async (file: File, modality: ModalityType) => {
-    const newObs = await satQueryService.uploadObservation(file, file.name.replace(/\.[^/.]+$/, ""), modality);
-    setObservations(prev => [newObs, ...prev]);
-    setActiveObservationIds([newObs.id]); // Activate ONLY the new observation
-    setActiveResult(null); // Reset old result panel to reflect fresh observation
-  };
-
-  // Handle Ingesting Satellite Product from CDSE Catalogue Search
-  const handleAddObservationFromProduct = (prod: any) => {
-    const modality: ModalityType = (prod.modality?.toUpperCase() === 'SAR' || (prod.platform && prod.platform.includes('Sentinel-1'))) ? 'SAR' : 'OPTICAL';
-    const isSar = modality === 'SAR';
-    const defaultImg = isSar
-      ? 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=1600&q=80'
-      : 'https://images.unsplash.com/photo-1541872703-74c5e44368f9?auto=format&fit=crop&w=1600&q=80';
-    const defaultThumb = isSar
-      ? 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=300&q=80'
-      : 'https://images.unsplash.com/photo-1541872703-74c5e44368f9?auto=format&fit=crop&w=300&q=80';
-
-    const dateStr = prod.acquisition_datetime
-      ? new Date(prod.acquisition_datetime).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase()
-      : new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase();
-
-    const realCdseUrl = prod.thumbnail_url || (prod.product_id ? `/api/data-sources/copernicus/quicklook/${prod.product_id}` : null);
-
-    const newObs: Observation = {
-      id: `obs-cdse-${Date.now()}`,
-      name: prod.metadata?.name || prod.title || prod.product_id || 'Copernicus Observation',
-      filename: `${prod.product_id || 'sentinel'}.tif`,
-      modality: modality,
-      date: dateStr,
-      dimensions: prod.resolution ? `${Math.round(2048 * (10 / (prod.resolution || 10)))} × 2048` : '3840 × 2160',
-      status: 'READY',
-      metadata: {
-        sensor: prod.platform || prod.instrument || `Sentinel-${isSar ? '1 SAR' : '2 MSI'}`,
-        lat: prod.bbox ? (prod.bbox[1] + prod.bbox[3]) / 2 : 25.2048,
-        lon: prod.bbox ? (prod.bbox[0] + prod.bbox[2]) / 2 : 55.2708,
-        cloudCover: prod.cloud_cover !== null && prod.cloud_cover !== undefined ? `${prod.cloud_cover.toFixed(1)}%` : '0.0%',
-        bands: isSar ? 'VV + VH Polarized Radar' : 'RGB High-Res',
-        fileSize: prod.size ? `${(prod.size / (1024 * 1024)).toFixed(1)} MB` : '52.4 MB',
-        groundSamplingDistance: prod.resolution ? `${prod.resolution}m/px` : '10m/px',
-        acquisitionTime: prod.acquisition_datetime ? prod.acquisition_datetime.substring(11, 19) + ' UTC' : '10:00:00 UTC'
-      },
-      imageUrl: realCdseUrl || defaultImg,
-      thumbnailUrl: realCdseUrl || defaultThumb,
-      isDemo: false
-    };
-
-    setObservations(prev => [newObs, ...prev]);
-    setActiveObservationIds([newObs.id]); // Activate ONLY the newly ingested product
-    setActiveResult(null); // Reset previous result panel
-  };
-
-  // Handle Query Submission & Agent Sequence
-  const handleExecuteQuery = async (queryText: string) => {
-    setCurrentQueryText(queryText);
-    setIsAnalyzing(true);
-    setAnalysisStepIndex(0);
-    setSelectedRegionId(null);
-
-    const activeObs = observations.filter(o => activeObservationIds.includes(o.id));
+  const [
+    theme,
+    setTheme,
+  ] = useState<
+    'dark' | 'light'
+  >(() => {
 
     try {
-      const result = await satQueryService.submitQuery(
-        queryText,
-        activeObs,
-        (stepIdx, label) => {
-          setAnalysisStepIndex(stepIdx);
-          setAnalysisStepLabel(label);
+
+      const saved =
+        localStorage.getItem(
+          'satquery_theme'
+        );
+
+      return (
+        saved === 'dark'
+          ? 'dark'
+          : 'light'
+      );
+
+    } catch {
+
+      return 'light';
+    }
+  });
+
+
+  useEffect(() => {
+
+    try {
+
+      localStorage.setItem(
+        'satquery_theme',
+        theme
+      );
+
+    } catch {
+      // Ignore localStorage failures.
+    }
+
+    const root =
+      document.documentElement;
+
+    if (
+      theme === 'light'
+    ) {
+
+      root.classList.add(
+        'light'
+      );
+
+      root.classList.remove(
+        'dark'
+      );
+
+    } else {
+
+      root.classList.add(
+        'dark'
+      );
+
+      root.classList.remove(
+        'light'
+      );
+    }
+
+  }, [
+    theme,
+  ]);
+
+
+  const handleToggleTheme =
+    () => {
+
+      setTheme(
+        previous =>
+          previous === 'dark'
+            ? 'light'
+            : 'dark'
+      );
+    };
+
+
+  // ==========================================================
+  // OBSERVATIONS
+  // ==========================================================
+
+  const [
+    observations,
+    setObservations,
+  ] = useState<Observation[]>(
+    DEMO_SCENARIOS[2].observations
+  );
+
+  const [
+    activeObservationIds,
+    setActiveObservationIds,
+  ] = useState<string[]>(
+    DEMO_SCENARIOS[2]
+      .observations
+      .map(
+        observation =>
+          observation.id
+      )
+  );
+
+
+  // ==========================================================
+  // ANALYSIS RESULT
+  // ==========================================================
+
+  const [
+    activeResult,
+    setActiveResult,
+  ] = useState<AnalysisResult | null>(
+    null
+  );
+
+  const [
+    selectedRegionId,
+    setSelectedRegionId,
+  ] = useState<string | null>(
+    null
+  );
+
+
+  // ==========================================================
+  // ANALYSIS STATE
+  // ==========================================================
+
+  const [
+    isAnalyzing,
+    setIsAnalyzing,
+  ] = useState<boolean>(
+    false
+  );
+
+  const [
+    analysisStepIndex,
+    setAnalysisStepIndex,
+  ] = useState<number>(
+    0
+  );
+
+  const [
+    analysisStepLabel,
+    setAnalysisStepLabel,
+  ] = useState<string>(
+    ''
+  );
+
+  const [
+    currentQueryText,
+    setCurrentQueryText,
+  ] = useState<string>(
+    ''
+  );
+
+
+  // ==========================================================
+  // USER FEEDBACK / ERROR
+  // ==========================================================
+
+  const [
+    appError,
+    setAppError,
+  ] = useState<string | null>(
+    null
+  );
+
+
+  // ==========================================================
+  // OTHER UI STATE
+  // ==========================================================
+
+  const [
+    isReplayOpen,
+    setIsReplayOpen,
+  ] = useState<boolean>(
+    false
+  );
+
+  const [
+    isDemoModalOpen,
+    setIsDemoModalOpen,
+  ] = useState<boolean>(
+    false
+  );
+
+  const [
+    currentDemoId,
+    setCurrentDemoId,
+  ] = useState<string>(
+    'demo-03'
+  );
+
+  const [
+    historyItems,
+    setHistoryItems,
+  ] = useState<QueryHistoryItem[]>(
+    []
+  );
+
+  const [
+    isObservationDrawerOpen,
+    setIsObservationDrawerOpen,
+  ] = useState<boolean>(
+    false
+  );
+
+
+  // ==========================================================
+  // WORKFLOW REF
+  // ==========================================================
+
+  const workflowRef =
+    useRef<HTMLDivElement>(
+      null
+    );
+
+
+  const handleScrollToWorkflow =
+    () => {
+
+      if (
+        activeView !==
+        'LANDING'
+      ) {
+
+        setActiveView(
+          'LANDING'
+        );
+
+        setTimeout(
+          () => {
+            workflowRef.current
+              ?.scrollIntoView({
+                behavior:
+                  'smooth',
+              });
+          },
+          100
+        );
+
+      } else {
+
+        workflowRef.current
+          ?.scrollIntoView({
+            behavior:
+              'smooth',
+          });
+      }
+    };
+
+
+  // ==========================================================
+  // INITIAL HISTORY LOAD
+  // ==========================================================
+
+  useEffect(() => {
+
+    let cancelled =
+      false;
+
+    const loadHistory =
+      async () => {
+
+        try {
+
+          const history =
+            await satQueryService
+              .getHistory();
+
+          if (
+            !cancelled
+          ) {
+            setHistoryItems(
+              history
+            );
+          }
+
+        } catch (
+        error
+        ) {
+
+          console.warn(
+            'Unable to load SatQuery history:',
+            error
+          );
+        }
+      };
+
+    loadHistory();
+
+    return () => {
+      cancelled = true;
+    };
+
+  }, []);
+
+
+  // ==========================================================
+  // OBSERVATION SELECT / DESELECT
+  // ==========================================================
+
+  const handleToggleObservation =
+    (
+      id: string
+    ) => {
+
+      setActiveObservationIds(
+        previous => {
+
+          if (
+            previous.includes(
+              id
+            )
+          ) {
+
+            // Do not allow zero active observations.
+            if (
+              previous.length ===
+              1
+            ) {
+              return previous;
+            }
+
+            return previous.filter(
+              itemId =>
+                itemId !== id
+            );
+
+          }
+
+          return [
+            ...previous,
+            id,
+          ];
         }
       );
 
-      setActiveResult(result);
-      // Refresh history
-      const updatedHistory = await satQueryService.getHistory();
-      setHistoryItems(updatedHistory);
-    } catch (err) {
-      console.error("Analysis execution error:", err);
-    } finally {
-      setIsAnalyzing(false);
-    }
-  };
+      // A changed observation selection means an old
+      // result may no longer represent the active inputs.
+      setActiveResult(
+        null
+      );
 
-  // Handle Loading Preset Demo Scenario
-  const handleSelectDemoScenario = (scenario: DemoScenario) => {
-    setCurrentDemoId(scenario.id);
-    setObservations(scenario.observations);
-    setActiveObservationIds(scenario.observations.map(o => o.id));
-    setActiveResult(scenario.presetResult);
-    setSelectedRegionId(null);
-    setActiveView('WORKSPACE');
-  };
+      setSelectedRegionId(
+        null
+      );
+    };
 
-  // Handle Opening History Item back in Workspace
-  const handleOpenHistoryResult = (item: QueryHistoryItem) => {
-    setActiveResult(item.result);
-    setSelectedRegionId(null);
-    setActiveView('WORKSPACE');
-  };
+
+  // ==========================================================
+  // LOCAL UPLOAD
+  // ==========================================================
+
+  const handleAddObservation =
+    async (
+      file: File,
+      modality: ModalityType
+    ) => {
+
+      setAppError(
+        null
+      );
+
+      try {
+
+        const newObservation =
+          await satQueryService
+            .uploadObservation(
+              file,
+              file.name.replace(
+                /\.[^/.]+$/,
+                ''
+              ),
+              modality
+            );
+
+        setObservations(
+          previous => [
+            newObservation,
+            ...previous,
+          ]
+        );
+
+        // New upload becomes the only active input.
+        setActiveObservationIds([
+          newObservation.id,
+        ]);
+
+        setActiveResult(
+          null
+        );
+
+        setSelectedRegionId(
+          null
+        );
+
+        setActiveView(
+          'WORKSPACE'
+        );
+
+        // Keep drawer open if the user needs to inspect the
+        // newly uploaded observation.
+        setIsObservationDrawerOpen(
+          false
+        );
+
+      } catch (
+      error
+      ) {
+
+        console.error(
+          'Observation upload failed:',
+          error
+        );
+
+        setAppError(
+          error instanceof Error
+            ? error.message
+            : 'Unable to upload the observation.'
+        );
+      }
+    };
+
+
+  // ==========================================================
+  // CDSE PRODUCT INGESTION
+  // ==========================================================
+
+  const handleAddObservationFromProduct =
+    async (
+      productOrObservation: any
+    ) => {
+
+      setAppError(
+        null
+      );
+
+      try {
+
+        // ------------------------------------------------------
+        // The updated SatelliteSearchModal sends the already
+        // ingested Observation returned by the backend.
+        //
+        // Keep a compatibility path for callers that still
+        // provide a raw CDSE product object.
+        // ------------------------------------------------------
+
+        const candidate =
+          productOrObservation as any;
+
+        const hasObservationIdentity =
+          Boolean(
+            candidate &&
+            candidate.id &&
+            (
+              candidate.sourceType ||
+              candidate.source_type ||
+              candidate.ingestionStatus ||
+              candidate.ingestion_status
+            )
+          );
+
+        let observation:
+          Observation;
+
+        if (
+          hasObservationIdentity &&
+          candidate.filename
+        ) {
+
+          observation =
+            candidate as Observation;
+
+        } else {
+
+          // ----------------------------------------------------
+          // Legacy/raw product compatibility.
+          //
+          // IMPORTANT:
+          // Never construct a fake READY observation.
+          // Delegate ingestion to the backend instead.
+          // ----------------------------------------------------
+
+          const productId =
+            candidate?.product_id ||
+            candidate?.productId ||
+            candidate?.id;
+
+          if (
+            !productId
+          ) {
+            throw new Error(
+              'The selected Copernicus product has no product ID.'
+            );
+          }
+
+          const modality =
+            normalizeModality(
+              candidate?.modality
+            );
+
+          observation =
+            await satQueryService
+              .ingestCopernicusProduct(
+                String(
+                  productId
+                ),
+                modality,
+                true
+              );
+        }
+
+        // ------------------------------------------------------
+        // Verify that CDSE ingestion actually produced a
+        // model-readable local asset.
+        // ------------------------------------------------------
+
+        if (
+          !observationHasModelAsset(
+            observation
+          )
+        ) {
+
+          const productId =
+            getObservationProductId(
+              observation
+            ) ||
+            'selected product';
+
+          throw new Error(
+            `The Copernicus product "${productId}" was selected, ` +
+            `but the backend did not return a model-readable ` +
+            `analysis asset. The product has not been marked READY.`
+          );
+        }
+
+        // ------------------------------------------------------
+        // Make sure it's represented as a real external
+        // observation rather than a demo.
+        // ------------------------------------------------------
+
+        const normalizedObservation =
+          {
+            ...observation,
+
+            isDemo:
+              false,
+
+            status:
+              'READY',
+          } as Observation;
+
+        // ------------------------------------------------------
+        // Replace same observation if it already exists.
+        // ------------------------------------------------------
+
+        setObservations(
+          previous => {
+
+            const withoutDuplicate =
+              previous.filter(
+                existing =>
+                  existing.id !==
+                  normalizedObservation.id
+              );
+
+            return [
+              normalizedObservation,
+              ...withoutDuplicate,
+            ];
+          }
+        );
+
+        // ------------------------------------------------------
+        // Activate only the new CDSE observation.
+        // ------------------------------------------------------
+
+        setActiveObservationIds([
+          normalizedObservation.id,
+        ]);
+
+        setActiveResult(
+          null
+        );
+
+        setSelectedRegionId(
+          null
+        );
+
+        setActiveView(
+          'WORKSPACE'
+        );
+
+        setIsObservationDrawerOpen(
+          false
+        );
+
+      } catch (
+      error
+      ) {
+
+        console.error(
+          'Copernicus observation ingestion failed:',
+          error
+        );
+
+        setAppError(
+          error instanceof Error
+            ? error.message
+            : 'Unable to ingest the Copernicus product.'
+        );
+      }
+    };
+
+
+  // ==========================================================
+  // EXECUTE QUERY
+  // ==========================================================
+
+  const handleExecuteQuery =
+    async (
+      queryText: string
+    ) => {
+
+      const query =
+        String(
+          queryText || ''
+        ).trim();
+
+      setAppError(
+        null
+      );
+
+      if (
+        !query
+      ) {
+
+        setAppError(
+          'Please enter a question before running analysis.'
+        );
+
+        return;
+      }
+
+      const activeObs =
+        observations.filter(
+          observation =>
+            activeObservationIds
+              .includes(
+                observation.id
+              )
+        );
+
+      if (
+        activeObs.length ===
+        0
+      ) {
+
+        setAppError(
+          'Select at least one observation before running analysis.'
+        );
+
+        return;
+      }
+
+      // --------------------------------------------------------
+      // Important:
+      // Do not send catalogue-only observations to the backend.
+      // --------------------------------------------------------
+
+      const invalidObservation =
+        activeObs.find(
+          observation =>
+            !observationHasModelAsset(
+              observation
+            )
+        );
+
+      if (
+        invalidObservation
+      ) {
+
+        const productId =
+          getObservationProductId(
+            invalidObservation
+          );
+
+        setAppError(
+          productId
+            ? `Satellite product ${productId} has not been ingested into a model-readable asset yet.`
+            : `Observation "${invalidObservation.name}" is not connected to a model-readable backend asset.`
+        );
+
+        return;
+      }
+
+      setCurrentQueryText(
+        query
+      );
+
+      setIsAnalyzing(
+        true
+      );
+
+      setAnalysisStepIndex(
+        0
+      );
+
+      setAnalysisStepLabel(
+        'Understanding request & parsing intent'
+      );
+
+      setSelectedRegionId(
+        null
+      );
+
+      try {
+
+        const result =
+          await satQueryService
+            .submitQuery(
+              query,
+              activeObs,
+              (
+                stepIndex,
+                label
+              ) => {
+
+                setAnalysisStepIndex(
+                  stepIndex
+                );
+
+                setAnalysisStepLabel(
+                  label
+                );
+              }
+            );
+
+        setActiveResult(
+          result
+        );
+
+        // Refresh audit history from backend/session.
+        try {
+
+          const updatedHistory =
+            await satQueryService
+              .getHistory();
+
+          setHistoryItems(
+            updatedHistory
+          );
+
+        } catch (
+        historyError
+        ) {
+
+          console.warn(
+            'Unable to refresh analysis history:',
+            historyError
+          );
+        }
+
+      } catch (
+      error
+      ) {
+
+        console.error(
+          'Analysis execution error:',
+          error
+        );
+
+        setActiveResult(
+          null
+        );
+
+        setAppError(
+          error instanceof Error
+            ? error.message
+            : 'SatQuery analysis failed.'
+        );
+
+      } finally {
+
+        setIsAnalyzing(
+          false
+        );
+      }
+    };
+
+
+  // ==========================================================
+  // LOAD DEMO
+  // ==========================================================
+
+  const handleSelectDemoScenario =
+    (
+      scenario: DemoScenario
+    ) => {
+
+      setCurrentDemoId(
+        scenario.id
+      );
+
+      setObservations(
+        scenario.observations
+      );
+
+      setActiveObservationIds(
+        scenario.observations.map(
+          observation =>
+            observation.id
+        )
+      );
+
+      setActiveResult(
+        scenario.presetResult
+      );
+
+      setSelectedRegionId(
+        null
+      );
+
+      setAppError(
+        null
+      );
+
+      setActiveView(
+        'WORKSPACE'
+      );
+    };
+
+
+  // ==========================================================
+  // HISTORY → WORKSPACE
+  // ==========================================================
+
+  const handleOpenHistoryResult =
+    (
+      item: QueryHistoryItem
+    ) => {
+
+      setActiveResult(
+        item.result
+      );
+
+      setSelectedRegionId(
+        null
+      );
+
+      setAppError(
+        null
+      );
+
+      setActiveView(
+        'WORKSPACE'
+      );
+    };
+
+
+  // ==========================================================
+  // RENDER
+  // ==========================================================
 
   return (
-    <div className="min-h-screen bg-transparent text-sat-text flex flex-col font-sans selection:bg-sat-accent/30 selection:text-sat-accent transition-colors duration-200 relative overflow-x-hidden">
+    <div
+      className="
+        min-h-screen
+        bg-transparent
+        text-sat-text
+        flex
+        flex-col
+        font-sans
+        selection:bg-sat-accent/30
+        selection:text-sat-accent
+        transition-colors
+        duration-200
+        relative
+        overflow-x-hidden
+      "
+    >
 
-      {/* Live Animated Space Background (Mouse Parallax + Cosmic Drift + Twinkling Stars) */}
+      {/* ====================================================
+          BACKGROUND
+      ==================================================== */}
+
       <LiveSpaceBackground />
 
-      {/* Top Mission Control Header */}
+
+      {/* ====================================================
+          HEADER
+      ==================================================== */}
+
       <HeaderBar
-        activeView={activeView}
-        setActiveView={setActiveView}
-        theme={theme}
-        onToggleTheme={handleToggleTheme}
-        activeDemoId={currentDemoId}
-        onOpenDemoSelector={() => setIsDemoModalOpen(true)}
-        onOpenSettings={() => setIsSettingsOpen(true)}
-        onScrollToWorkflow={handleScrollToWorkflow}
+        activeView={
+          activeView
+        }
+
+        setActiveView={
+          setActiveView
+        }
+
+        theme={
+          theme
+        }
+
+        onToggleTheme={
+          handleToggleTheme
+        }
+
+        activeDemoId={
+          currentDemoId
+        }
+
+        onOpenDemoSelector={() =>
+          setIsDemoModalOpen(
+            true
+          )
+        }
+
+        onOpenSettings={() =>
+          setIsSettingsOpen(
+            true
+          )
+        }
+
+        onScrollToWorkflow={
+          handleScrollToWorkflow
+        }
       />
 
-      {/* Main Container Views */}
-      <div className="flex-1 flex flex-col overflow-hidden z-10 relative">
 
-        {/* VIEW 1: LANDING PAGE */}
-        {activeView === 'LANDING' && (
-          <LandingPage
-            workflowRef={workflowRef}
-            onEnterWorkspace={() => setActiveView('WORKSPACE')}
-            onViewDemo={() => setIsDemoModalOpen(true)}
-          />
-        )}
+      {/* ====================================================
+          MAIN
+      ==================================================== */}
 
-        {/* VIEW 2: WORKSPACE (DESKTOP & RESPONSIVE STACK) */}
-        {activeView === 'WORKSPACE' && (
-          <div className="flex-1 flex flex-col overflow-y-auto min-h-0">
+      <div
+        className="
+          flex-1
+          flex
+          flex-col
+          overflow-hidden
+          z-10
+          relative
+        "
+      >
+
+        {/* ==================================================
+            LANDING
+        ================================================== */}
+
+        {activeView ===
+          'LANDING' && (
+            <LandingPage
+              workflowRef={
+                workflowRef
+              }
+
+              onEnterWorkspace={() =>
+                setActiveView(
+                  'WORKSPACE'
+                )
+              }
+
+              onViewDemo={() =>
+                setIsDemoModalOpen(
+                  true
+                )
+              }
+            />
+          )}
 
 
+        {/* ==================================================
+            WORKSPACE
+        ================================================== */}
 
-            {/* Two-Zone Workspace: Canvas + Query. Observation management
-                lives in a drawer (see below) rather than a permanent column,
-                so a new user has two things to look at, not three. */}
-            <div className="flex-none h-[calc(100vh-3.5rem)] grid grid-cols-1 lg:grid-cols-9 overflow-hidden border-b border-sat-border relative">
+        {activeView ===
+          'WORKSPACE' && (
 
-              {/* Center: Central Earth GIS Canvas */}
-              <div className="lg:col-span-6 h-full overflow-hidden border-b lg:border-b-0 lg:border-r border-sat-border relative">
-                {/* Floating toggle for the Observation drawer */}
-                <button
-                  onClick={() => setIsObservationDrawerOpen(true)}
-                  className="absolute top-3 left-3 z-20 flex items-center gap-1.5 px-3 py-1.5 rounded bg-sat-surface/90 backdrop-blur border border-sat-border hover:border-sat-accent text-xs font-mono text-sat-text hover:text-sat-accent transition-colors shadow-md"
+            <div
+              className="
+              flex-1
+              flex
+              flex-col
+              overflow-y-auto
+              min-h-0
+            "
+            >
+
+              {/* ==================================================
+                APP ERROR
+            ================================================== */}
+
+              {appError && (
+                <div
+                  className="
+                  mx-4
+                  mt-3
+                  rounded-xl
+                  border
+                  border-sat-border
+                  bg-sat-surface
+                  px-4
+                  py-3
+                  text-sm
+                  text-sat-text
+                  shadow-lg
+                "
                 >
-                  🛰️ Images ({observations.length})
-                </button>
 
-                <EarthCanvas
-                  observations={observations}
-                  activeObservationIds={activeObservationIds}
-                  activeResult={activeResult}
-                  selectedRegionId={selectedRegionId}
-                  onSelectRegion={setSelectedRegionId}
-                  onSelectDemoScenario={(demoId) => {
-                    const scenario = DEMO_SCENARIOS.find(s => s.id === demoId);
-                    if (scenario) handleSelectDemoScenario(scenario);
-                  }}
-                />
-              </div>
-
-              {/* Right: Ask SatQuery Interface */}
-              <div className="lg:col-span-3 h-full overflow-hidden">
-                <QueryInterface
-                  observations={observations}
-                  activeObservationIds={activeObservationIds}
-                  onExecuteQuery={handleExecuteQuery}
-                  isAnalyzing={isAnalyzing}
-                />
-              </div>
-
-              {/* Slide-over Drawer: Observation / Data Panel.
-                  Same ObservationPanel component and props as before —
-                  only its container changed, from a permanent column to
-                  an on-demand overlay. */}
-              {isObservationDrawerOpen && (
-                <div className="fixed inset-0 z-50 flex">
                   <div
-                    className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-                    onClick={() => setIsObservationDrawerOpen(false)}
-                  />
-                  <div className="relative w-full max-w-lg md:w-[480px] h-full bg-sat-surface border-r border-sat-border shadow-2xl overflow-y-auto">
-                    <div className="flex items-center justify-between p-4 border-b border-sat-border bg-sat-panel">
-                      <span className="font-mono text-sm font-bold uppercase tracking-wider text-sat-text">🛰️ SATELLITE DATASETS ({observations.length})</span>
-                      <button
-                        onClick={() => setIsObservationDrawerOpen(false)}
-                        className="text-sat-dim hover:text-sat-accent transition-colors px-2 py-1 font-mono text-sm font-bold"
-                        aria-label="Close"
+                    className="
+                    flex
+                    items-start
+                    justify-between
+                    gap-4
+                  "
+                  >
+
+                    <div>
+
+                      <div
+                        className="
+                        font-semibold
+                        text-sat-text
+                      "
                       >
-                        ✕ CLOSE
-                      </button>
+                        Analysis / data error
+                      </div>
+
+                      <div
+                        className="
+                        mt-1
+                        text-xs
+                        text-sat-muted
+                      "
+                      >
+                        {appError}
+                      </div>
+
                     </div>
-                    <ObservationPanel
-                      observations={observations}
-                      activeObservationIds={activeObservationIds}
-                      onToggleObservation={handleToggleObservation}
-                      onAddObservation={handleAddObservation}
-                      onAddObservationFromProduct={handleAddObservationFromProduct}
-                      onOpenSearchModal={() => setIsSearchModalOpen(true)}
-                      onSelectDemoScenario={(demoId) => {
-                        const scenario = DEMO_SCENARIOS.find(s => s.id === demoId);
-                        if (scenario) handleSelectDemoScenario(scenario);
-                      }}
-                    />
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setAppError(
+                          null
+                        )
+                      }
+                      className="
+                      shrink-0
+                      text-xs
+                      font-semibold
+                      text-sat-muted
+                      hover:text-sat-text
+                    "
+                    >
+                      DISMISS
+                    </button>
+
                   </div>
+
                 </div>
               )}
 
+
+              {/* ==================================================
+                TWO-ZONE WORKSPACE
+            ================================================== */}
+
+              <div
+                className="
+                flex-none
+                h-[calc(100vh-3.5rem)]
+                grid
+                grid-cols-1
+                lg:grid-cols-9
+                overflow-hidden
+                border-b
+                border-sat-border
+                relative
+              "
+              >
+
+                {/* ==================================================
+                  EARTH CANVAS
+              ================================================== */}
+
+                <div
+                  className="
+                  lg:col-span-6
+                  h-full
+                  overflow-hidden
+                  border-b
+                  lg:border-b-0
+                  lg:border-r
+                  border-sat-border
+                  relative
+                "
+                >
+
+                  {/* Observation drawer button */}
+
+                  <button
+                    onClick={() =>
+                      setIsObservationDrawerOpen(
+                        true
+                      )
+                    }
+                    className="
+                    absolute
+                    top-3
+                    left-3
+                    z-20
+                    flex
+                    items-center
+                    gap-1.5
+                    px-3
+                    py-1.5
+                    rounded
+                    bg-sat-surface/90
+                    backdrop-blur
+                    border
+                    border-sat-border
+                    hover:border-sat-accent
+                    text-xs
+                    font-mono
+                    text-sat-text
+                    hover:text-sat-accent
+                    transition-colors
+                    shadow-md
+                  "
+                  >
+                    🛰️ Images ({
+                      observations.length
+                    })
+                  </button>
+
+
+                  <EarthCanvas
+                    observations={
+                      observations
+                    }
+
+                    activeObservationIds={
+                      activeObservationIds
+                    }
+
+                    activeResult={
+                      activeResult
+                    }
+
+                    selectedRegionId={
+                      selectedRegionId
+                    }
+
+                    onSelectRegion={
+                      setSelectedRegionId
+                    }
+
+                    onSelectDemoScenario={
+                      (
+                        demoId
+                      ) => {
+
+                        const scenario =
+                          DEMO_SCENARIOS.find(
+                            item =>
+                              item.id ===
+                              demoId
+                          );
+
+                        if (
+                          scenario
+                        ) {
+                          handleSelectDemoScenario(
+                            scenario
+                          );
+                        }
+                      }
+                    }
+                  />
+
+                </div>
+
+
+                {/* ==================================================
+                  QUERY INTERFACE
+              ================================================== */}
+
+                <div
+                  className="
+                  lg:col-span-3
+                  h-full
+                  overflow-hidden
+                "
+                >
+
+                  <QueryInterface
+                    observations={
+                      observations
+                    }
+
+                    activeObservationIds={
+                      activeObservationIds
+                    }
+
+                    onExecuteQuery={
+                      handleExecuteQuery
+                    }
+
+                    isAnalyzing={
+                      isAnalyzing
+                    }
+                  />
+
+                </div>
+
+
+                {/* ==================================================
+                  OBSERVATION DRAWER
+              ================================================== */}
+
+                {isObservationDrawerOpen && (
+                  <div
+                    className="
+                    fixed
+                    inset-0
+                    z-50
+                    flex
+                  "
+                  >
+
+                    {/* Overlay */}
+
+                    <div
+                      className="
+                      absolute
+                      inset-0
+                      bg-black/60
+                      backdrop-blur-sm
+                    "
+                      onClick={() =>
+                        setIsObservationDrawerOpen(
+                          false
+                        )
+                      }
+                    />
+
+
+                    {/* Drawer */}
+
+                    <div
+                      className="
+                      relative
+                      w-full
+                      max-w-lg
+                      md:w-[480px]
+                      h-full
+                      bg-sat-surface
+                      border-r
+                      border-sat-border
+                      shadow-2xl
+                      overflow-y-auto
+                    "
+                    >
+
+                      {/* Drawer header */}
+
+                      <div
+                        className="
+                        flex
+                        items-center
+                        justify-between
+                        p-4
+                        border-b
+                        border-sat-border
+                        bg-sat-panel
+                      "
+                      >
+
+                        <span
+                          className="
+                          font-mono
+                          text-sm
+                          font-bold
+                          uppercase
+                          tracking-wider
+                          text-sat-text
+                        "
+                        >
+                          🛰️ SATELLITE DATASETS ({
+                            observations.length
+                          })
+                        </span>
+
+                        <button
+                          onClick={() =>
+                            setIsObservationDrawerOpen(
+                              false
+                            )
+                          }
+                          className="
+                          text-sat-dim
+                          hover:text-sat-accent
+                          transition-colors
+                          px-2
+                          py-1
+                          font-mono
+                          text-sm
+                          font-bold
+                        "
+                          aria-label="Close observation drawer"
+                        >
+                          ✕ CLOSE
+                        </button>
+
+                      </div>
+
+
+                      <ObservationPanel
+                        observations={
+                          observations
+                        }
+
+                        activeObservationIds={
+                          activeObservationIds
+                        }
+
+                        onToggleObservation={
+                          handleToggleObservation
+                        }
+
+                        onAddObservation={
+                          handleAddObservation
+                        }
+
+                        onAddObservationFromProduct={
+                          handleAddObservationFromProduct
+                        }
+
+                        onOpenSearchModal={() =>
+                          setIsSearchModalOpen(
+                            true
+                          )
+                        }
+
+                        onSelectDemoScenario={
+                          (
+                            demoId
+                          ) => {
+
+                            const scenario =
+                              DEMO_SCENARIOS.find(
+                                item =>
+                                  item.id ===
+                                  demoId
+                              );
+
+                            if (
+                              scenario
+                            ) {
+
+                              handleSelectDemoScenario(
+                                scenario
+                              );
+
+                              setIsObservationDrawerOpen(
+                                false
+                              );
+                            }
+                          }
+                        }
+                      />
+
+                    </div>
+
+                  </div>
+                )}
+
+              </div>
+
+
+              {/* ==================================================
+                RESULT PANEL
+            ================================================== */}
+
+              {activeResult &&
+                !isAnalyzing && (
+                  <ResultPanel
+                    result={
+                      activeResult
+                    }
+
+                    selectedRegionId={
+                      selectedRegionId
+                    }
+
+                    onSelectRegion={
+                      setSelectedRegionId
+                    }
+
+                    onOpenReplay={() =>
+                      setIsReplayOpen(
+                        true
+                      )
+                    }
+
+                    onFollowUpQuery={
+                      handleExecuteQuery
+                    }
+                  />
+                )}
+
             </div>
+          )}
 
-            {/* Bottom Integrated Result Experience Panel */}
-            {activeResult && !isAnalyzing && (
-              <ResultPanel
-                result={activeResult}
-                selectedRegionId={selectedRegionId}
-                onSelectRegion={setSelectedRegionId}
-                onOpenReplay={() => setIsReplayOpen(true)}
-                onFollowUpQuery={handleExecuteQuery}
+
+        {/* ==================================================
+            HISTORY
+        ================================================== */}
+
+        {activeView ===
+          'HISTORY' && (
+
+            <div
+              className="
+              flex-1
+              overflow-y-auto
+              bg-transparent
+            "
+            >
+
+              <HistoryView
+                historyItems={
+                  historyItems
+                }
+
+                onOpenHistoryResult={
+                  handleOpenHistoryResult
+                }
               />
-            )}
 
-          </div>
-        )}
-
-        {/* VIEW 3: AUDIT HISTORY */}
-        {activeView === 'HISTORY' && (
-          <div className="flex-1 overflow-y-auto bg-transparent">
-            <HistoryView
-              historyItems={historyItems}
-              onOpenHistoryResult={handleOpenHistoryResult}
-            />
-          </div>
-        )}
+            </div>
+          )}
 
       </div>
 
-      {/* MODAL 1: AI Agent Analysis Execution Progress Sequence */}
+
+      {/* ====================================================
+          ANALYSIS PROGRESS
+      ==================================================== */}
+
       {isAnalyzing && (
         <AnalysisStatusModal
-          currentStepIndex={analysisStepIndex}
-          currentStepLabel={analysisStepLabel}
-          queryText={currentQueryText}
+          currentStepIndex={
+            analysisStepIndex
+          }
+
+          currentStepLabel={
+            analysisStepLabel
+          }
+
+          queryText={
+            currentQueryText
+          }
         />
       )}
 
-      {/* MODAL 2: Auditable Analysis Replay Pipeline */}
-      {isReplayOpen && activeResult && (
-        <AnalysisReplayModal
-          result={activeResult}
-          onClose={() => setIsReplayOpen(false)}
-        />
-      )}
 
-      {/* MODAL 3: Preset Demo Selector */}
+      {/* ====================================================
+          REPLAY
+      ==================================================== */}
+
+      {isReplayOpen &&
+        activeResult && (
+          <AnalysisReplayModal
+            result={
+              activeResult
+            }
+
+            onClose={() =>
+              setIsReplayOpen(
+                false
+              )
+            }
+          />
+        )}
+
+
+      {/* ====================================================
+          DEMO SELECTOR
+      ==================================================== */}
+
       {isDemoModalOpen && (
         <DemoSelectorModal
-          onSelectScenario={handleSelectDemoScenario}
-          onClose={() => setIsDemoModalOpen(false)}
-          currentDemoId={currentDemoId}
+          onSelectScenario={
+            (
+              scenario
+            ) => {
+
+              handleSelectDemoScenario(
+                scenario
+              );
+
+              setIsDemoModalOpen(
+                false
+              );
+            }
+          }
+
+          onClose={() =>
+            setIsDemoModalOpen(
+              false
+            )
+          }
+
+          currentDemoId={
+            currentDemoId
+          }
         />
       )}
 
-      {/* MODAL 4: Satellite Data Search & Ingestion (Copernicus CDSE) */}
+
+      {/* ====================================================
+          CDSE SEARCH
+      ==================================================== */}
+
       <SatelliteSearchModal
-        isOpen={isSearchModalOpen}
-        onClose={() => setIsSearchModalOpen(false)}
-        onAddObservation={handleAddObservation}
-        onAddProductAsObservation={handleAddObservationFromProduct}
+        isOpen={
+          isSearchModalOpen
+        }
+
+        onClose={() =>
+          setIsSearchModalOpen(
+            false
+          )
+        }
+
+        onAddObservation={
+          handleAddObservation
+        }
+
+        onAddProductAsObservation={
+          handleAddObservationFromProduct
+        }
       />
 
-      {/* MODAL 5: Platform Preferences & Engine Settings */}
+
+      {/* ====================================================
+          SETTINGS
+      ==================================================== */}
+
       <SettingsModal
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
+        isOpen={
+          isSettingsOpen
+        }
+
+        onClose={() =>
+          setIsSettingsOpen(
+            false
+          )
+        }
       />
 
     </div>
   );
 }
+
 
 export default App;

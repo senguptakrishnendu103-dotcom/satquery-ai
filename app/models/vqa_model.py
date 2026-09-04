@@ -3,6 +3,7 @@ import time
 from typing import Dict, Any, List, Optional
 
 from app.models.base_model import BaseRSModel
+from app.utils.image_resolver import ImageResolver
 
 
 # ----------------------------------------------------------------------
@@ -447,24 +448,31 @@ class RemoteSensingVQAModel(BaseRSModel):
         metadata: Dict[str, Any],
     ) -> Dict[str, Any]:
         """
-        Execute generative VQA over the selected observation.
+        Execute generative VQA over the actual observation.
 
-        No answer is hardcoded here.
+        A configured VLM is mandatory for a genuine VQA result. The method does
+        not silently replace a failed/missing VLM with a heuristic answer.
         """
-
         start_time = time.perf_counter()
 
         if not images:
             raise ValueError(
-                "RemoteSensingVQAModel requires at least "
-                "one observation."
+                "RemoteSensingVQAModel requires at least one observation."
             )
 
         observation = images[0]
 
-        image = self._resolve_image(
-            observation
-        )
+        if not self._runtime.model_id:
+            raise RuntimeError(
+                "No remote-sensing VQA model is configured. "
+                "Set SATQUERY_VQA_MODEL_ID before running SINGLE_IMAGE_VQA."
+            )
+
+        # Convert the real raster asset into a displayable RGB image before passing
+        # it to a generic image-text pipeline. This preserves actual spatial image
+        # content while avoiding the incorrect assumption that every HF VLM can
+        # directly ingest a GeoTIFF/JP2 path.
+        image = self._resolve_model_image(observation)
 
         prompt = self._build_prompt(
             query,
@@ -472,67 +480,63 @@ class RemoteSensingVQAModel(BaseRSModel):
             metadata,
         )
 
-        answer = self._runtime.generate(
-            image=image,
-            prompt=prompt,
-            max_new_tokens=int(
-                os.getenv(
-                    "SATQUERY_VQA_MAX_NEW_TOKENS",
-                    "256",
-                )
-            ),
-            temperature=float(
-                os.getenv(
-                    "SATQUERY_VQA_TEMPERATURE",
-                    "0.2",
-                )
-            ),
-        )
+        try:
+            answer = self._runtime.generate(
+                image=image,
+                prompt=prompt,
+                max_new_tokens=int(
+                    os.getenv(
+                        "SATQUERY_VQA_MAX_NEW_TOKENS",
+                        "256",
+                    )
+                ),
+                temperature=float(
+                    os.getenv(
+                        "SATQUERY_VQA_TEMPERATURE",
+                        "0.2",
+                    )
+                ),
+            )
+        except Exception as exc:
+            raise RuntimeError(
+                f"Configured remote-sensing VQA model failed: {exc}"
+            ) from exc
+
+        answer = str(answer or "").strip()
+        if not answer:
+            raise RuntimeError(
+                "The configured remote-sensing VQA model returned an empty answer."
+            )
 
         inference_time_ms = round(
-            (
-                time.perf_counter()
-                - start_time
-            )
-            * 1000,
+            (time.perf_counter() - start_time) * 1000,
             2,
         )
 
-        if not answer:
-            raise RuntimeError(
-                "The configured VQA model returned "
-                "an empty response."
-            )
-
         result = {
             "answer": answer,
-
-            # A generative VLM response alone should not pretend to
-            # provide calibrated confidence. Until the model supplies
-            # a calibrated score, expose a conservative runtime-level
-            # value rather than fabricating certainty.
+            # A genuine calibrated model confidence must come from the model.
+            # Until that adapter exists, this remains 0.0.
             "confidence": self._get_model_confidence(),
-
-            # VQA itself doesn't necessarily provide spatial boxes.
-            # Keep the field so EarthCanvas/ResultPanel remain compatible.
             "visual_evidence": {
-                "overlay_type": "vqa_attention",
-                "label": "VLM Analysis",
+                "overlay_type": "vqa_input",
+                "label": "VLM Analysis Input",
                 "boxes": [],
                 "regions": [],
             },
-
             "execution_details": {
-                "model_architecture": (
-                    self.name
-                ),
-                "model_id": (
-                    self._runtime.model_id
-                ),
+                "model_architecture": self.name,
+                "model_id": self._runtime.model_id,
                 "provider": self.provider,
-                "inference_time_ms": (
-                    inference_time_ms
-                ),
+                "inference_time_ms": inference_time_ms,
+                "input_asset": {
+                    "file_path": observation.get("file_path"),
+                    "product_id": observation.get("product_id"),
+                    "provider": observation.get("provider"),
+                    "collection": observation.get("collection"),
+                    "source_type": observation.get("source_type"),
+                },
+                "input_representation": "RGB render from supplied raster asset",
                 "parameters_used": {
                     "max_new_tokens": int(
                         os.getenv(
@@ -546,16 +550,11 @@ class RemoteSensingVQAModel(BaseRSModel):
                             "0.2",
                         )
                     ),
-                    "input_type": (
-                        metadata.get(
-                            "model_input_type",
-                            "single_optical",
-                        )
+                    "input_type": metadata.get(
+                        "model_input_type",
+                        "single_optical",
                     ),
                 },
-
-                # Provenance information is preferable to invented
-                # benchmark claims.
                 "dataset_reference": os.getenv(
                     "SATQUERY_VQA_DATASET_REFERENCE",
                     "Configured remote-sensing training/adaptation data",
@@ -563,10 +562,7 @@ class RemoteSensingVQAModel(BaseRSModel):
             },
         }
 
-        return self.validate_result(
-            result
-        )
-
+        return self.validate_result(result)
     # ==================================================================
     # PROMPT CONSTRUCTION
     # ==================================================================
@@ -593,27 +589,20 @@ class RemoteSensingVQAModel(BaseRSModel):
             "unknown",
         )
 
+        metadata = observation.get("metadata")
+        if not isinstance(metadata, dict):
+            metadata = {}
+
         sensor = (
-            observation.get(
-                "sensor"
-            )
-            or observation.get(
-                "metadata",
-                {},
-            ).get(
-                "sensor"
-            )
-            if isinstance(
-                observation.get(
-                    "metadata",
-                    {},
-                ),
-                dict,
-            )
-            else observation.get(
-                "sensor",
-                "unknown",
-            )
+            observation.get("sensor")
+            or metadata.get("sensor")
+            or "unknown"
+        )
+
+        product_family = (
+            observation.get("product_family")
+            or metadata.get("product_family")
+            or "unknown"
         )
 
         return (
@@ -629,7 +618,8 @@ class RemoteSensingVQAModel(BaseRSModel):
             "observation from inference.\n\n"
             f"Observation modality: {modality}\n"
             f"Acquisition date: {acquisition_date}\n"
-            f"Sensor: {sensor or 'unknown'}\n"
+            f"Sensor: {sensor}\n"
+            f"Product family: {product_family}\n"
             f"User question: {query}\n\n"
             "Return a direct answer to the question."
         )
@@ -639,42 +629,35 @@ class RemoteSensingVQAModel(BaseRSModel):
     # ==================================================================
 
     @staticmethod
-    def _resolve_image(
+    @staticmethod
+    def _resolve_model_image(
         observation: Dict[str, Any],
     ) -> Any:
         """
-        Resolve the image payload expected by the inference runtime.
+        Resolve a real observation into the PIL image representation expected by
+        a generic image-text VLM.
 
-        Supported project conventions:
-            image
-            image_path
-            file_path
-            path
-            imageUrl
-            image_url
+        ImageResolver handles:
+          - GeoTIFF/TIFF/JP2
+          - PNG/JPEG
+          - canonical multispectral analysis stacks
+          - real local observation paths
 
-        The observation loader can later provide a PIL image directly.
+        No synthetic image is produced.
         """
+        try:
+            return ImageResolver.load_image(observation)
+        except Exception as exc:
+            raise RuntimeError(
+                f"Unable to convert observation raster to a VLM image: {exc}"
+            ) from exc
 
-        for key in (
-            "image",
-            "image_path",
-            "file_path",
-            "path",
-            "imageUrl",
-            "image_url",
-        ):
-            value = observation.get(
-                key
-            )
-
-            if value:
-                return value
-
-        raise ValueError(
-            "Observation does not contain a usable image payload/path."
-        )
-
+    # Backward-compatible alias for callers that may still reference _resolve_image.
+    @staticmethod
+    def _resolve_image(
+        observation: Dict[str, Any],
+    ) -> Any:
+        return RemoteSensingVQAModel._resolve_model_image(observation)
     # ==================================================================
     # CONFIDENCE
     # ==================================================================
@@ -800,19 +783,27 @@ class RemoteSensingCaptioningModel(BaseRSModel):
     ) -> Dict[str, Any]:
         """
         Generate a scene description from the actual observation.
-        """
 
+        A configured captioning VLM is mandatory for a genuine captioning result;
+        failures are surfaced instead of silently substituting deterministic RGB
+        heuristics.
+        """
         start_time = time.perf_counter()
 
         if not images:
             raise ValueError(
-                "RemoteSensingCaptioningModel requires "
-                "at least one observation."
+                "RemoteSensingCaptioningModel requires at least one observation."
             )
 
         observation = images[0]
 
-        image = RemoteSensingVQAModel._resolve_image(
+        if not self._runtime.model_id:
+            raise RuntimeError(
+                "No remote-sensing captioning model is configured. "
+                "Set SATQUERY_CAPTION_MODEL_ID before running IMAGE_CAPTIONING."
+            )
+
+        image = RemoteSensingVQAModel._resolve_model_image(
             observation
         )
 
@@ -821,54 +812,60 @@ class RemoteSensingCaptioningModel(BaseRSModel):
             observation,
         )
 
-        answer = self._runtime.generate(
-            image=image,
-            prompt=prompt,
-            max_new_tokens=int(
-                os.getenv(
-                    "SATQUERY_CAPTION_MAX_NEW_TOKENS",
-                    "256",
-                )
-            ),
-            temperature=float(
-                os.getenv(
-                    "SATQUERY_CAPTION_TEMPERATURE",
-                    "0.2",
-                )
-            ),
-        )
+        try:
+            answer = self._runtime.generate(
+                image=image,
+                prompt=prompt,
+                max_new_tokens=int(
+                    os.getenv(
+                        "SATQUERY_CAPTION_MAX_NEW_TOKENS",
+                        "256",
+                    )
+                ),
+                temperature=float(
+                    os.getenv(
+                        "SATQUERY_CAPTION_TEMPERATURE",
+                        "0.2",
+                    )
+                ),
+            )
+        except Exception as exc:
+            raise RuntimeError(
+                f"Configured remote-sensing captioning model failed: {exc}"
+            ) from exc
+
+        answer = str(answer or "").strip()
+        if not answer:
+            raise RuntimeError(
+                "The configured remote-sensing captioning model returned an empty answer."
+            )
 
         inference_time_ms = round(
-            (
-                time.perf_counter()
-                - start_time
-            )
-            * 1000,
+            (time.perf_counter() - start_time) * 1000,
             2,
         )
 
-        if not answer:
-            raise RuntimeError(
-                "The configured captioning model returned "
-                "an empty response."
-            )
-
         result = {
             "answer": answer,
-
             "confidence": self._get_model_confidence(),
-
             "visual_evidence": {
                 "overlay_type": "scene_description",
-                "label": "VLM Scene Description",
+                "label": "VLM Scene Description Input",
                 "regions": [],
             },
-
             "execution_details": {
                 "model_architecture": self.name,
                 "model_id": self._runtime.model_id,
                 "provider": self.provider,
                 "inference_time_ms": inference_time_ms,
+                "input_asset": {
+                    "file_path": observation.get("file_path"),
+                    "product_id": observation.get("product_id"),
+                    "provider": observation.get("provider"),
+                    "collection": observation.get("collection"),
+                    "source_type": observation.get("source_type"),
+                },
+                "input_representation": "RGB render from supplied raster asset",
                 "parameters_used": {
                     "max_new_tokens": int(
                         os.getenv(
@@ -890,10 +887,7 @@ class RemoteSensingCaptioningModel(BaseRSModel):
             },
         }
 
-        return self.validate_result(
-            result
-        )
-
+        return self.validate_result(result)
     # ==================================================================
     # PROMPT
     # ==================================================================

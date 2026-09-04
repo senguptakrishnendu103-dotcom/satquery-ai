@@ -1,573 +1,2452 @@
-import type { Observation, AnalysisResult, QueryHistoryItem, ModalityType } from '../types/satquery';
+import type {
+  Observation,
+  AnalysisResult,
+  QueryHistoryItem,
+  ModalityType,
+} from '../types/satquery';
+
 import { DEMO_SCENARIOS } from '../data/demoScenarios';
 
-// In-memory state for local user activity during session
-let userObservations: Observation[] = [...DEMO_SCENARIOS[2].observations]; // Default to demo 03
-let sessionHistory: QueryHistoryItem[] = [
-  {
-    id: 'hist-001',
-    queryText: 'What changed between 2024 and 2026 observations?',
-    observationsUsed: ['optical_urban_base_2024.tif', 'optical_urban_recent_2026.tif'],
-    analysisType: 'Bi-Temporal Change Detection',
-    timestamp: '01 SEP 2026 20:20 UTC',
-    status: 'Complete',
-    confidence: 87,
-    resultSummary: 'Built-up area increased (+14.2%, +5.8 km²)',
-    result: DEMO_SCENARIOS[2].presetResult
-  },
-  {
-    id: 'hist-002',
-    queryText: 'Find water body boundaries and calculate area',
-    observationsUsed: ['multispectral_lake_res_2026.tif'],
-    analysisType: 'NDWI Hydrological Surface Grounding',
-    timestamp: '01 SEP 2026 19:40 UTC',
-    status: 'Complete',
-    confidence: 96,
-    resultSummary: 'Water surface area: 412.6 km² detected',
-    result: DEMO_SCENARIOS[1].presetResult
-  }
+
+// ============================================================
+// TYPES
+// ============================================================
+
+type BackendUploadMetadata = {
+  id?: string;
+  filename?: string;
+  name?: string;
+
+  url?: string;
+  image_url?: string;
+  imageUrl?: string;
+
+  file_path?: string;
+  local_path?: string;
+
+  source_type?: string;
+  ingestion_status?: string;
+
+  sensor?: string;
+  modality?: string;
+
+  dimensions?: [number, number] | number[] | string;
+
+  bounds?: number[];
+  resolution?: number;
+
+  bands?: string[] | string[];
+
+  acquisition_date?: string | null;
+
+  [key: string]: unknown;
+};
+
+
+type BackendAnalysisResponse = {
+  query?: string;
+
+  task?: string;
+
+  input_mode?: string;
+
+  selected_model?: {
+    name?: string;
+    description?: string;
+  };
+
+  processing_steps?: unknown[];
+
+  answer?: string;
+
+  confidence?: number;
+
+  visual_evidence?: unknown;
+
+  execution_summary?: {
+    task?: string;
+
+    inputs?: unknown[];
+
+    models_used?: string[];
+    modelsUsed?: string[];
+
+    tools_used?: string[];
+    toolsUsed?: string[];
+
+    tools?: string[];
+
+    execution_time_seconds?: number;
+
+    execution_time_ms?: number;
+
+    telemetry_id?: string;
+
+    audit_timestamp?: string;
+
+    model_version?: string;
+
+    dataset_version?: string;
+
+    execution_status?: string;
+
+    [key: string]: unknown;
+  };
+
+  error?: boolean;
+  message?: string;
+
+  [key: string]: unknown;
+};
+
+
+type BackendSearchResponse = {
+  status: string;
+  provider: string;
+  count: number;
+  products: any[];
+};
+
+
+type BackendIngestResponse = {
+  status: string;
+  message?: string;
+  observation: any;
+  downloaded?: boolean;
+};
+
+
+type ServiceStepCallback = (
+  stepIndex: number,
+  label: string
+) => void;
+
+
+// ============================================================
+// SESSION STATE
+// ============================================================
+
+// Keep demo initialization for the existing application behavior.
+// Real uploaded/CDSE observations are inserted ahead of demos.
+let userObservations: Observation[] = [
+  ...DEMO_SCENARIOS[2].observations,
 ];
 
-export const satQueryService = {
-  /**
-   * Upload an observation image file via backend API /api/upload
-   */
-  async uploadObservation(file: File, name?: string, modality: ModalityType = 'OPTICAL'): Promise<Observation> {
-    const objectUrl = URL.createObjectURL(file);
-    let realMeta: any = null;
 
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
-      const res = await fetch('/api/upload', {
-        method: 'POST',
-        body: formData,
-      });
+// Session history populated by backend responses.
+let sessionHistory: QueryHistoryItem[] = [];
 
-      if (res.ok) {
-        realMeta = await res.json();
+
+// ============================================================
+// CONSTANTS
+// ============================================================
+
+const ANALYSIS_STEPS = [
+  'Understanding request & parsing intent',
+  'Checking active observation metadata',
+  'Determining analysis type',
+  'Selecting remote sensing AI model',
+  'Running specialist analysis',
+  'Generating spatial evidence',
+  'Finalizing auditable result',
+];
+
+
+// ============================================================
+// GENERIC HELPERS
+// ============================================================
+
+function isRecord(
+  value: unknown
+): value is Record<string, unknown> {
+  return (
+    typeof value === 'object' &&
+    value !== null
+  );
+}
+
+
+function formatDate(
+  date: Date = new Date()
+): string {
+  return (
+    date
+      .toLocaleDateString(
+        'en-GB',
+        {
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+        }
+      )
+      .toUpperCase()
+  );
+}
+
+
+function formatTimestamp(
+  date: Date = new Date()
+): string {
+  return (
+    `${formatDate(date)} ` +
+    `${date.toISOString().substring(11, 16)} UTC`
+  );
+}
+
+
+function normalizeConfidence(
+  value: unknown
+): number {
+  const numeric = Number(value);
+
+  if (!Number.isFinite(numeric)) {
+    return 0;
+  }
+
+  let confidence = numeric;
+
+  // Backend/model may provide 0..1 or 0..100.
+  if (
+    confidence >= 0 &&
+    confidence <= 1
+  ) {
+    confidence *= 100;
+  }
+
+  return Math.max(
+    0,
+    Math.min(
+      100,
+      Math.round(confidence)
+    )
+  );
+}
+
+
+function getBackendError(
+  response: Response,
+  fallback: string
+): Promise<Error> {
+  return response
+    .json()
+    .catch(() => ({}))
+    .then((data) => {
+      const detail =
+        isRecord(data) &&
+          typeof data.detail === 'string'
+          ? data.detail
+          : null;
+
+      return new Error(
+        detail ||
+        fallback ||
+        `Request failed with HTTP ${response.status}`
+      );
+    });
+}
+
+
+async function fetchJson<T>(
+  input: RequestInfo | URL,
+  init?: RequestInit
+): Promise<T> {
+  const response = await fetch(
+    input,
+    init
+  );
+
+  if (!response.ok) {
+    throw await getBackendError(
+      response,
+      `Request failed with HTTP ${response.status}`
+    );
+  }
+
+  return response.json() as Promise<T>;
+}
+
+
+// ============================================================
+// OBSERVATION HELPERS
+// ============================================================
+
+function getObservationFilePath(
+  observation: Observation
+): string | undefined {
+  const candidate: any =
+    observation as any;
+
+  return (
+    candidate.filePath ||
+    candidate.file_path ||
+    candidate.localPath ||
+    candidate.local_path ||
+    candidate.metadata?.filePath ||
+    candidate.metadata?.file_path ||
+    undefined
+  );
+}
+
+
+function getObservationSourceType(
+  observation: Observation
+): string | undefined {
+  const candidate: any =
+    observation as any;
+
+  return (
+    candidate.sourceType ||
+    candidate.source_type ||
+    candidate.metadata?.sourceType ||
+    candidate.metadata?.source_type ||
+    undefined
+  );
+}
+
+
+function getObservationIngestionStatus(
+  observation: Observation
+): string | undefined {
+  const candidate: any =
+    observation as any;
+
+  return (
+    candidate.ingestionStatus ||
+    candidate.ingestion_status ||
+    candidate.metadata?.ingestionStatus ||
+    candidate.metadata?.ingestion_status ||
+    undefined
+  );
+}
+
+
+function extractObservationAcquisitionDate(
+  observation: Observation
+): string | null {
+  const candidate: any =
+    observation as any;
+
+  return (
+    candidate.acquisitionDate ||
+    candidate.acquisition_date ||
+    candidate.metadata?.acquisitionDate ||
+    candidate.metadata?.acquisition_date ||
+    candidate.date ||
+    null
+  );
+}
+
+
+function extractObservationSensor(
+  observation: Observation
+): string | undefined {
+  const candidate: any =
+    observation as any;
+
+  return (
+    candidate.sensor ||
+    candidate.metadata?.sensor ||
+    undefined
+  );
+}
+
+
+function observationToBackendPayload(
+  observation: Observation
+): Record<string, unknown> {
+  const candidate: any =
+    observation as any;
+
+  const filePath =
+    getObservationFilePath(
+      observation
+    );
+
+  const sourceType =
+    getObservationSourceType(
+      observation
+    );
+
+  const ingestionStatus =
+    getObservationIngestionStatus(
+      observation
+    );
+
+  const acquisitionDate =
+    extractObservationAcquisitionDate(
+      observation
+    );
+
+  const sensor =
+    extractObservationSensor(
+      observation
+    );
+
+  return {
+    id:
+      candidate.id,
+
+    name:
+      candidate.name,
+
+    filename:
+      candidate.filename ||
+      candidate.name,
+
+    modality:
+      normalizeModalityForBackend(
+        candidate.modality
+      ),
+
+    // Keep both frontend/backend naming conventions.
+    date:
+      candidate.date,
+
+    acquisition_date:
+      acquisitionDate,
+
+    acquisitionDate:
+      acquisitionDate,
+
+    url:
+      candidate.imageUrl ||
+      candidate.image_url ||
+      candidate.url,
+
+    image_url:
+      candidate.imageUrl ||
+      candidate.image_url ||
+      candidate.url,
+
+    imageUrl:
+      candidate.imageUrl ||
+      candidate.image_url ||
+      candidate.url,
+
+    thumbnail_url:
+      candidate.thumbnailUrl ||
+      candidate.thumbnail_url,
+
+    thumbnailUrl:
+      candidate.thumbnailUrl ||
+      candidate.thumbnail_url,
+
+    // CRITICAL:
+    // Actual local backend/model asset.
+    file_path:
+      filePath,
+
+    local_path:
+      filePath,
+
+    source_type:
+      sourceType,
+
+    ingestion_status:
+      ingestionStatus,
+
+    provider:
+      candidate.provider ||
+      candidate.metadata?.provider,
+
+    product_id:
+      candidate.productId ||
+      candidate.product_id ||
+      candidate.metadata?.productId ||
+      candidate.metadata?.product_id,
+
+    sensor:
+      sensor,
+
+    metadata:
+      candidate.metadata || {},
+  };
+}
+
+
+function normalizeModalityForBackend(
+  modality: unknown
+): string {
+  const value =
+    String(
+      modality || 'OPTICAL'
+    )
+      .trim()
+      .toLowerCase();
+
+  if (
+    value === 'sar' ||
+    value === 'radar'
+  ) {
+    return 'sar';
+  }
+
+  if (
+    value === 'multispectral' ||
+    value === 'multi-spectral' ||
+    value === 'ms'
+  ) {
+    return 'multispectral';
+  }
+
+  return 'optical';
+}
+
+
+// ============================================================
+// EVIDENCE NORMALIZATION
+// ============================================================
+
+function normalizeEvidence(
+  rawEvidence: unknown
+): any[] {
+  if (
+    Array.isArray(rawEvidence)
+  ) {
+    return rawEvidence;
+  }
+
+  if (
+    isRecord(rawEvidence)
+  ) {
+    const candidateArrays = [
+      rawEvidence.regions,
+      rawEvidence.boxes,
+      rawEvidence.detections,
+      rawEvidence.features,
+      rawEvidence.items,
+    ];
+
+    for (
+      const candidate
+      of candidateArrays
+    ) {
+      if (
+        Array.isArray(candidate)
+      ) {
+        return candidate;
       }
-    } catch (e) {
-      console.warn("Backend upload failed, using local client metadata:", e);
+    }
+  }
+
+  return [];
+}
+
+
+function normalizeEvidenceRegion(
+  region: any,
+  index: number
+): any {
+  if (!isRecord(region)) return null;
+
+  const confidence =
+    region?.confidence !== undefined
+      ? normalizeConfidence(region.confidence)
+      : undefined;
+
+  const coords =
+    region?.coords ||
+    region?.bbox ||
+    region?.box ||
+    region?.coordinates;
+
+  return {
+    id:
+      region?.id ||
+      `reg-api-${index + 1}`,
+
+    label:
+      region?.label ||
+      region?.name ||
+      `Feature ${index + 1}`,
+
+    coords:
+      coords || undefined,
+
+    areaEstimate:
+      region?.areaEstimate ??
+      region?.area ??
+      region?.area_estimate ??
+      undefined,
+
+    confidence,
+
+    type:
+      region?.type ||
+      'detection',
+
+    description:
+      region?.description ||
+      undefined,
+
+    metrics:
+      Array.isArray(region?.metrics)
+        ? region.metrics
+        : undefined,
+  };
+}
+
+
+// ============================================================
+// BACKEND RESPONSE → FRONTEND RESULT
+// ============================================================
+
+function backendToAnalysisResult(
+  backendData: BackendAnalysisResponse,
+  queryText: string,
+  activeObservations: Observation[]
+): AnalysisResult {
+  const rawEvidence =
+    normalizeEvidence(
+      backendData.visual_evidence
+    );
+
+  const evidence = rawEvidence
+    .map(normalizeEvidenceRegion)
+    .filter(Boolean);
+
+  const modelsUsed =
+    Array.isArray(
+      backendData.execution_summary?.models_used
+    )
+      ? backendData.execution_summary!.models_used!
+      : Array.isArray(
+        backendData.execution_summary?.modelsUsed
+      )
+        ? backendData.execution_summary!.modelsUsed!
+        : backendData.selected_model?.name
+          ? [
+            backendData.selected_model.name,
+          ]
+          : [];
+
+  const toolsExecuted =
+    Array.isArray(
+      backendData.execution_summary?.tools_used
+    )
+      ? backendData.execution_summary!.tools_used!
+      : Array.isArray(
+        backendData.execution_summary?.toolsUsed
+      )
+        ? backendData.execution_summary!.toolsUsed!
+        : Array.isArray(
+          backendData.execution_summary?.tools
+        )
+          ? backendData.execution_summary!.tools!
+          : [];
+
+  const confidence =
+    backendData.confidence !== undefined
+      ? normalizeConfidence(backendData.confidence)
+      : 0;
+
+  const executionTimeSeconds =
+    Number(
+      backendData.execution_summary
+        ?.execution_time_seconds ??
+      0
+    );
+
+  const executionTimeMs =
+    Number.isFinite(
+      executionTimeSeconds
+    ) && executionTimeSeconds > 0
+      ? Math.round(
+        executionTimeSeconds * 1000
+      )
+      : Number(
+        backendData.execution_summary
+          ?.execution_time_ms ??
+        0
+      );
+
+  const executionInputs =
+    Array.isArray(
+      backendData.execution_summary
+        ?.inputs
+    )
+      ? backendData.execution_summary!.inputs!
+      : activeObservations.map(
+        (
+          observation
+        ) =>
+          observation.filename ||
+          observation.name
+      );
+
+  const processingSteps =
+    Array.isArray(
+      backendData.processing_steps
+    )
+      ? backendData.processing_steps
+      : [];
+
+  const replaySteps =
+    processingSteps.map(
+      (
+        step: unknown,
+        index: number
+      ) => {
+        const label =
+          typeof step === 'string'
+            ? step
+            : isRecord(step) &&
+              typeof step.label === 'string'
+              ? step.label
+              : `Processing step ${index + 1}`;
+
+        const status =
+          isRecord(step) &&
+            typeof step.status === 'string'
+            ? step.status
+            : 'complete';
+
+        return {
+          phase:
+            `STEP ${String(index + 1).padStart(2, '0')}`,
+
+          label,
+
+          timestamp:
+            'backend',
+
+          details:
+            isRecord(step) &&
+              typeof step.details === 'string'
+              ? step.details
+              : `Executed ${label}`,
+
+          status,
+        };
+      }
+    );
+
+  const timestamp =
+    backendData.execution_summary
+      ?.audit_timestamp ||
+    formatTimestamp();
+
+  const telemetryId =
+    (backendData.execution_summary?.telemetry_id as string) ||
+    (backendData.execution_summary?.telemetryId as string) ||
+    undefined;
+
+  const modelVersion =
+    (backendData.execution_summary?.model_version as string) ||
+    (backendData.execution_summary?.modelVersion as string) ||
+    undefined;
+
+  const datasetVersion =
+    (backendData.execution_summary?.dataset_version as string) ||
+    (backendData.execution_summary?.datasetVersion as string) ||
+    undefined;
+
+  const result: AnalysisResult = {
+    id:
+      `res-api-${Date.now()}`,
+
+    queryText:
+      backendData.query ||
+      queryText,
+
+    task:
+      backendData.task ||
+      'SatQuery AI Analysis',
+
+    models:
+      modelsUsed,
+
+    status:
+      'COMPLETE',
+
+    confidence,
+
+    headline:
+      backendData.task ||
+      'Remote-Sensing Analysis Complete',
+
+    answer:
+      backendData.answer ||
+      'The analysis backend returned no textual answer.',
+
+    changePercentage:
+      deriveChangePercentage(
+        backendData
+      ),
+
+    overlayType:
+      determineOverlayTypeFromBackend(
+        backendData
+      ),
+
+    evidence,
+
+    executionSummary: {
+      task:
+        backendData.task ||
+        'SatQuery AI Execution',
+
+      inputs:
+        executionInputs,
+
+      modelsUsed,
+
+      toolsExecuted,
+
+      executionTimeMs:
+        executionTimeMs || undefined,
+
+      telemetryId,
+
+      modelVersion,
+
+      datasetVersion,
+    },
+
+    replaySteps,
+
+    followUpActions: [
+      'SHOW WHERE (Highlight evidence on map)',
+      'MEASURE AREA (Detailed metric breakdown)',
+      'EXPORT REPORT (Generate PDF/GeoJSON audit summary)',
+    ],
+
+    timestamp,
+  };
+
+  return result;
+}
+
+
+// ============================================================
+// CHANGE PERCENTAGE
+// ============================================================
+
+function deriveChangePercentage(
+  backendData: BackendAnalysisResponse
+): string | undefined {
+  const candidate: any =
+    backendData as any;
+
+  const directCandidates = [
+    candidate.change_percentage,
+    candidate.changePercentage,
+    candidate.execution_summary?.change_percentage,
+    candidate.execution_summary?.changePercentage,
+  ];
+
+  for (
+    const value
+    of directCandidates
+  ) {
+    if (
+      typeof value === 'number' &&
+      Number.isFinite(value)
+    ) {
+      const sign =
+        value > 0
+          ? '+'
+          : '';
+
+      return `${sign}${value}%`;
     }
 
-    const newObs: Observation = {
-      id: `obs-user-${Date.now()}`,
-      name: name || file.name.replace(/\.[^/.]+$/, ""),
-      filename: file.name,
-      modality: modality,
-      date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase(),
-      dimensions: realMeta?.dimensions ? `${realMeta.dimensions[0]} × ${realMeta.dimensions[1]}` : '3840 × 2160',
-      status: 'READY',
-      metadata: {
-        sensor: realMeta?.sensor || `UserUpload-${modality.substring(0, 3)}`,
-        lat: realMeta?.bounds ? (realMeta.bounds[1] + realMeta.bounds[3]) / 2 : 22.5726 + (Math.random() * 0.05 - 0.025),
-        lon: realMeta?.bounds ? (realMeta.bounds[0] + realMeta.bounds[2]) / 2 : 88.3639 + (Math.random() * 0.05 - 0.025),
-        cloudCover: '0.0%',
-        bands: realMeta?.bands ? `${realMeta.bands.length} Channels (${realMeta.bands.join(', ')})` : (modality === 'SAR' ? 'VV Radar Backscatter' : 'RGB High-Res'),
-        fileSize: `${(file.size / (1024 * 1024)).toFixed(1)} MB`,
-        groundSamplingDistance: realMeta?.resolution ? `${realMeta.resolution}m/px` : '0.5m/px',
-        acquisitionTime: new Date().toISOString().substring(11, 19) + ' UTC'
-      },
-      imageUrl: realMeta?.url || objectUrl,
-      thumbnailUrl: realMeta?.url || objectUrl,
-      isDemo: false
-    };
+    if (
+      typeof value === 'string' &&
+      value.trim()
+    ) {
+      return value;
+    }
+  }
 
-    userObservations.unshift(newObs);
+  const statistics =
+    candidate.change_statistics ||
+    candidate.execution_summary?.change_statistics;
+
+  if (
+    isRecord(statistics)
+  ) {
+    const percentage =
+      statistics.percentage ??
+      statistics.change_percentage ??
+      statistics.changePercentage;
+
+    if (
+      typeof percentage === 'number' &&
+      Number.isFinite(percentage)
+    ) {
+      const sign =
+        percentage > 0
+          ? '+'
+          : '';
+
+      return `${sign}${percentage}%`;
+    }
+
+    if (
+      typeof percentage === 'string'
+    ) {
+      return percentage;
+    }
+  }
+
+  // No synthetic number.
+  return undefined;
+}
+
+
+// ============================================================
+// OVERLAY TYPE
+// ============================================================
+
+function determineOverlayTypeFromBackend(
+  backendData: BackendAnalysisResponse
+):
+  'change' |
+  'ndwi' |
+  'sar_fusion' |
+  'detection' {
+  const task =
+    String(
+      backendData.task || ''
+    ).toLowerCase();
+
+  const inputMode =
+    String(
+      backendData.input_mode || ''
+    ).toLowerCase();
+
+  if (
+    task.includes('water') ||
+    task.includes('ndwi')
+  ) {
+    return 'ndwi';
+  }
+
+  if (
+    inputMode === 'optical_sar' ||
+    task.includes('sar') ||
+    task.includes('radar')
+  ) {
+    return 'sar_fusion';
+  }
+
+  if (
+    inputMode === 'bi_temporal' ||
+    task.includes('change')
+  ) {
+    return 'change';
+  }
+
+  return 'detection';
+}
+
+
+// ============================================================
+// INPUT MODE
+// ============================================================
+
+function determineInputMode(
+  activeObservations: Observation[]
+): string {
+  const count =
+    activeObservations.length;
+
+  const hasSar =
+    activeObservations.some(
+      (observation) =>
+        normalizeModalityForBackend(
+          (observation as any).modality
+        ) === 'sar'
+    );
+
+  const hasOptical =
+    activeObservations.some(
+      (observation) => {
+        const modality =
+          normalizeModalityForBackend(
+            (observation as any).modality
+          );
+
+        return (
+          modality === 'optical' ||
+          modality === 'multispectral'
+        );
+      }
+    );
+
+  if (
+    count >= 2 &&
+    hasSar &&
+    hasOptical
+  ) {
+    return 'optical_sar';
+  }
+
+  if (
+    count >= 2
+  ) {
+    return 'bi_temporal';
+  }
+
+  return 'single_image';
+}
+
+
+// ============================================================
+// PUBLIC SERVICE
+// ============================================================
+
+export const satQueryService = {
+
+  // ==========================================================
+  // UPLOAD OBSERVATION
+  // ==========================================================
+
+  async uploadObservation(
+    file: File,
+    name?: string,
+    modality: ModalityType = 'OPTICAL'
+  ): Promise<Observation> {
+
+    const formData =
+      new FormData();
+
+    formData.append(
+      'file',
+      file
+    );
+
+    let realMeta:
+      BackendUploadMetadata;
+
+    try {
+
+      realMeta =
+        await fetchJson<BackendUploadMetadata>(
+          '/api/upload',
+          {
+            method:
+              'POST',
+
+            body:
+              formData,
+          }
+        );
+
+    } catch (error) {
+
+      // Do NOT silently create a fake "backend-ready"
+      // observation if upload fails.
+      console.error(
+        'SatQuery backend upload failed:',
+        error
+      );
+
+      throw error;
+    }
+
+    const backendModality =
+      normalizeModalityForBackend(
+        modality
+      );
+
+    const dimensions =
+      formatDimensions(
+        realMeta.dimensions
+      );
+
+    const bounds =
+      Array.isArray(
+        realMeta.bounds
+      ) &&
+        realMeta.bounds.length >= 4
+        ? realMeta.bounds
+        : undefined;
+
+    const centerLat =
+      bounds
+        ? (
+          Number(bounds[1]) +
+          Number(bounds[3])
+        ) / 2
+        : undefined;
+
+    const centerLon =
+      bounds
+        ? (
+          Number(bounds[0]) +
+          Number(bounds[2])
+        ) / 2
+        : undefined;
+
+    const bands =
+      Array.isArray(
+        realMeta.bands
+      )
+        ? realMeta.bands
+        : [];
+
+    const acquisitionDate =
+      realMeta.acquisition_date ||
+      null;
+
+    const newObs: Observation = {
+      id:
+        String(
+          realMeta.id ||
+          `obs-user-${Date.now()}`
+        ),
+
+      name:
+        name ||
+        realMeta.name ||
+        file.name.replace(
+          /\.[^/.]+$/,
+          ''
+        ),
+
+      filename:
+        realMeta.filename ||
+        file.name,
+
+      modality:
+        modality,
+
+      date:
+        acquisitionDate
+          ? formatObservationDate(
+            acquisitionDate
+          )
+          : 'DATE NOT AVAILABLE',
+
+      dimensions:
+        dimensions ||
+        'Unknown',
+
+      status:
+        'READY',
+
+      metadata: {
+        sensor:
+          realMeta.sensor ||
+          `UserUpload-${backendModality}`,
+
+        lat:
+          centerLat,
+
+        lon:
+          centerLon,
+
+        cloudCover:
+          formatOptionalPercentage(
+            findMetadataValue(
+              realMeta,
+              [
+                'cloud_cover',
+                'cloudCover',
+                'cloudCoverPercentage',
+              ]
+            )
+          ),
+
+        bands:
+          bands.length > 0
+            ? `${bands.length} Channels (${bands.join(', ')})`
+            : 'Band information unavailable',
+
+        fileSize:
+          `${(
+            file.size /
+            (1024 * 1024)
+          ).toFixed(1)} MB`,
+
+        groundSamplingDistance:
+          typeof realMeta.resolution === 'number'
+            ? `${realMeta.resolution}m/px`
+            : 'Not available',
+
+        acquisitionTime:
+          acquisitionDate
+            ? formatAcquisitionTime(
+              acquisitionDate
+            )
+            : 'Not available',
+
+        // Preserve actual backend metadata.
+        ...realMeta,
+      },
+
+      imageUrl:
+        String(
+          realMeta.url ||
+          realMeta.image_url ||
+          ''
+        ),
+
+      thumbnailUrl:
+        String(
+          realMeta.url ||
+          realMeta.image_url ||
+          ''
+        ),
+
+      isDemo:
+        false,
+
+      // ------------------------------------------------------
+      // The next properties are runtime-compatible even if
+      // your Observation interface is currently narrower.
+      // Cast happens below without changing UI contracts.
+      // ------------------------------------------------------
+      ...((
+        {
+          filePath:
+            realMeta.file_path,
+
+          file_path:
+            realMeta.file_path,
+
+          localPath:
+            realMeta.local_path ||
+            realMeta.file_path,
+
+          local_path:
+            realMeta.local_path ||
+            realMeta.file_path,
+
+          sourceType:
+            realMeta.source_type ||
+            'upload',
+
+          source_type:
+            realMeta.source_type ||
+            'upload',
+
+          ingestionStatus:
+            realMeta.ingestion_status ||
+            'ready',
+
+          ingestion_status:
+            realMeta.ingestion_status ||
+            'ready',
+
+          acquisitionDate:
+            acquisitionDate,
+
+          acquisition_date:
+            acquisitionDate,
+
+          provider:
+            realMeta.provider,
+
+          productId:
+            realMeta.product_id,
+
+          product_id:
+            realMeta.product_id,
+        } as any
+      )),
+    } as Observation;
+
+    userObservations.unshift(
+      newObs
+    );
+
     return newObs;
   },
 
-  /**
-   * Get active observations
-   */
-  async getObservations(): Promise<Observation[]> {
-    return [...userObservations];
+
+  // ==========================================================
+  // GET OBSERVATIONS
+  // ==========================================================
+
+  async getObservations():
+    Promise<Observation[]> {
+
+    return [
+      ...userObservations,
+    ];
   },
 
-  /**
-   * Submit natural language query on satellite observations
-   */
+
+  // ==========================================================
+  // SUBMIT QUERY
+  // ==========================================================
+
   async submitQuery(
     queryText: string,
     activeObservations: Observation[],
-    onStepUpdate?: (stepIndex: number, label: string) => void
+    onStepUpdate?: ServiceStepCallback
   ): Promise<AnalysisResult> {
-    const steps = [
-      "Understanding request & parsing intent",
-      "Checking active observation metadata",
-      "Selecting remote sensing AI model",
-      "Executing spectral & spatial pipeline",
-      "Generating spatial evidence bounding boxes",
-      "Finalizing telemetry audit log"
-    ];
 
-    // Progress steps for user experience
-    for (let i = 0; i < steps.length; i++) {
-      if (onStepUpdate) {
-        onStepUpdate(i, steps[i]);
-      }
-      await new Promise(r => setTimeout(r, 350));
+    const query =
+      String(
+        queryText || ''
+      ).trim();
+
+    if (!query) {
+      throw new Error(
+        'Please enter a question before running analysis.'
+      );
     }
 
-    const queryLower = queryText.toLowerCase();
-    const count = activeObservations.length;
-
-    // Determine input mode
-    let inputMode = 'single_image';
-    const hasSar = activeObservations.some(o => o.modality === 'SAR');
-    const hasOptical = activeObservations.some(o => o.modality === 'OPTICAL' || o.modality === 'MULTISPECTRAL');
-
-    if (count >= 2 && hasSar && hasOptical) {
-      inputMode = 'optical_sar';
-    } else if (count >= 2) {
-      inputMode = 'bi_temporal';
+    if (
+      !activeObservations ||
+      activeObservations.length === 0
+    ) {
+      throw new Error(
+        'Select at least one observation before running analysis.'
+      );
     }
 
-    // Attempt live call to FastAPI backend /api/analyze
+    // --------------------------------------------------------
+    // Update UI status immediately.
+    // These are status notifications, NOT fake analysis.
+    // --------------------------------------------------------
+
+    onStepUpdate?.(
+      0,
+      ANALYSIS_STEPS[0]
+    );
+
+    const inputMode =
+      determineInputMode(
+        activeObservations
+      );
+
+    // --------------------------------------------------------
+    // Validate observations locally before contacting backend.
+    // --------------------------------------------------------
+
+    onStepUpdate?.(
+      1,
+      ANALYSIS_STEPS[1]
+    );
+
+    validateFrontendObservations(
+      activeObservations,
+      inputMode
+    );
+
+    onStepUpdate?.(
+      2,
+      ANALYSIS_STEPS[2]
+    );
+
+    onStepUpdate?.(
+      3,
+      ANALYSIS_STEPS[3]
+    );
+
+    // --------------------------------------------------------
+    // Build REAL backend observation payloads.
+    // --------------------------------------------------------
+
+    const backendImages =
+      activeObservations.map(
+        observationToBackendPayload
+      );
+
+    // --------------------------------------------------------
+    // Execute REAL backend analysis.
+    // --------------------------------------------------------
+
+    onStepUpdate?.(
+      4,
+      ANALYSIS_STEPS[4]
+    );
+
+    let backendData:
+      BackendAnalysisResponse;
+
     try {
-      const apiResponse = await fetch('/api/analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          query: queryText,
-          input_mode: inputMode,
-          images: activeObservations.map(o => ({
-            name: o.name,
-            filename: o.filename,
-            modality: o.modality,
-            date: o.date,
-            url: o.imageUrl,
-            metadata: o.metadata
-          }))
-        })
-      });
 
-      if (apiResponse.ok) {
-        const backendData = await apiResponse.json();
-        if (backendData && !backendData.error) {
-          // Format backend response into AnalysisResult
-          const backendEvidence: EvidenceRegion[] = (backendData.visual_evidence?.regions || backendData.visual_evidence?.boxes || []).map((b: any, idx: number) => ({
-            id: b.id || `reg-api-${idx + 1}`,
-            label: b.label || b.name || `Feature ${idx + 1}`,
-            coords: b.coords || { x: 20 + idx * 20, y: 25 + idx * 15, width: 25, height: 25 },
-            areaEstimate: b.areaEstimate || b.area || '2.4 km²',
-            confidence: b.confidence || Math.floor(85 + Math.random() * 12),
-            type: b.type || 'detection',
-            description: b.description || `Detected spatial feature in observation dataset.`,
-            metrics: b.metrics || [{ label: 'Confidence', value: `${b.confidence || 90}%` }]
-          }));
+      backendData =
+        await fetchJson<BackendAnalysisResponse>(
+          '/api/analyze',
+          {
+            method:
+              'POST',
 
-          // If backend evidence is empty, synthesize query-specific evidence
-          const evidence = backendEvidence.length > 0 ? backendEvidence : this.generateDynamicEvidence(queryLower, activeObservations);
-
-          const result: AnalysisResult = {
-            id: `res-api-${Date.now()}`,
-            queryText: queryText,
-            task: backendData.task || 'SatQuery AI Analysis',
-            models: [backendData.selected_model?.name || 'SatQuery-VQA-v3.1'],
-            status: 'COMPLETE',
-            confidence: backendData.confidence || 89,
-            headline: backendData.headline || this.generateHeadline(queryLower),
-            answer: backendData.answer || `Analysis completed for query "${queryText}".`,
-            changePercentage: queryLower.includes('change') || inputMode === 'bi_temporal' ? '+14.2%' : undefined,
-            overlayType: this.determineOverlayType(queryLower, inputMode),
-            evidence: evidence,
-            executionSummary: {
-              task: backendData.task || 'SatQuery AI Execution',
-              inputs: activeObservations.map(o => o.filename),
-              modelsUsed: [backendData.selected_model?.name || 'SatQuery-VQA-v3.1'],
-              toolsExecuted: backendData.execution_summary?.tools_used || ['RasterPreprocessor', 'FeatureExtractor'],
-              executionTimeMs: Math.round((backendData.execution_summary?.execution_time_seconds || 1.2) * 1000),
-              telemetryId: `SQ-TEL-${Date.now().toString().slice(-8)}`,
-              modelVersion: 'v3.1.0-prod',
-              datasetVersion: 'Sentinel-Copernicus-2026'
+            headers: {
+              'Content-Type':
+                'application/json',
             },
-            replaySteps: (backendData.processing_steps || []).map((s: string, idx: number) => ({
-              phase: `STEP 0${idx + 1}`,
-              label: s,
-              timestamp: `00:0${idx + 1}.100`,
-              details: `Executed ${s}`,
-              status: 'complete'
-            })),
-            followUpActions: [
-              'SHOW WHERE (Highlight regions on map)',
-              'MEASURE AREA (Detailed metric breakdown)',
-              'EXPORT REPORT (Generate PDF/GeoJSON audit summary)'
-            ],
-            timestamp: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase() + ' ' + new Date().toISOString().substring(11, 16) + ' UTC'
-          };
 
-          sessionHistory.unshift({
-            id: `hist-${Date.now()}`,
-            queryText,
-            observationsUsed: activeObservations.map(o => o.filename),
-            analysisType: result.task,
-            timestamp: result.timestamp,
-            status: 'Complete',
-            confidence: result.confidence,
-            resultSummary: result.headline,
-            result: result
-          });
+            body:
+              JSON.stringify({
+                query,
 
-          return result;
-        }
-      }
-    } catch (err) {
-      console.warn("Backend API fetch failed, falling back to dynamic client synthesis:", err);
+                input_mode:
+                  inputMode,
+
+                images:
+                  backendImages,
+              }),
+          }
+        );
+
+    } catch (error) {
+
+      console.error(
+        'SatQuery backend analysis failed:',
+        error
+      );
+
+      throw new Error(
+        error instanceof Error
+          ? error.message
+          : 'SatQuery analysis failed.'
+      );
     }
 
-    // Dynamic Client Synthesis with Query-Specific Evidence
-    const task = this.determineTask(queryLower, inputMode);
-    const headline = this.generateHeadline(queryLower);
-    const answer = this.generateAnswer(queryLower, activeObservations);
-    const evidence = this.generateDynamicEvidence(queryLower, activeObservations);
-    const overlayType = this.determineOverlayType(queryLower, inputMode);
-    const changePct = (queryLower.includes('change') || inputMode === 'bi_temporal') ? '+14.2%' : undefined;
+    if (
+      backendData.error
+    ) {
+      throw new Error(
+        backendData.message ||
+        'SatQuery backend reported an analysis error.'
+      );
+    }
 
-    const customResult: AnalysisResult = {
-      id: `res-run-${Date.now()}`,
-      queryText: queryText,
-      task: task,
-      models: this.selectModelsForQuery(queryLower, inputMode),
-      status: 'COMPLETE',
-      confidence: Math.floor(88 + Math.random() * 9),
-      headline: headline,
-      answer: answer,
-      changePercentage: changePct,
-      overlayType: overlayType,
-      evidence: evidence,
-      executionSummary: {
-        task: task,
-        inputs: activeObservations.map(o => o.filename),
-        modelsUsed: this.selectModelsForQuery(queryLower, inputMode),
-        toolsExecuted: ['BandMathProcessor', 'SpatialSegmentation', 'ConfidenceEvaluator'],
-        executionTimeMs: 1340,
-        telemetryId: `SQ-TEL-${Date.now().toString().slice(-8)}`,
-        modelVersion: 'v3.1.0-prod',
-        datasetVersion: 'Copernicus-2026'
-      },
-      replaySteps: [
-        { phase: 'INPUTS', label: 'Observation Ingestion', timestamp: '00:00.120', details: `Loaded ${count} active observation(s).`, status: 'complete' },
-        { phase: 'QUERY', label: 'Intent Extraction', timestamp: '00:00.310', details: `Parsed user query: "${queryText}"`, status: 'complete' },
-        { phase: 'PIPELINE', label: 'Model Selection', timestamp: '00:00.520', details: `Routed to ${task}.`, status: 'complete' },
-        { phase: 'ANALYSIS', label: 'Spatial Feature Grounding', timestamp: '00:00.980', details: 'Extracted spatial evidence bounding boxes and indices.', status: 'complete' },
-        { phase: 'EVIDENCE', label: 'Evidence Synthesis', timestamp: '00:01.240', details: `Synthesized ${evidence.length} inspectable regions.`, status: 'complete' }
-      ],
-      followUpActions: [
-        'SHOW WHERE (Highlight evidence on map)',
-        'MEASURE AREA (Detailed metric breakdown)',
-        'EXPORT GEOJSON (Vector spatial format)'
-      ],
-      timestamp: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase() + ' ' + new Date().toISOString().substring(11, 16) + ' UTC'
+    // --------------------------------------------------------
+    // Evidence stage.
+    // --------------------------------------------------------
+
+    onStepUpdate?.(
+      5,
+      ANALYSIS_STEPS[5]
+    );
+
+    const result =
+      backendToAnalysisResult(
+        backendData,
+        query,
+        activeObservations
+      );
+
+    // --------------------------------------------------------
+    // Finalization stage.
+    // --------------------------------------------------------
+
+    onStepUpdate?.(
+      6,
+      ANALYSIS_STEPS[6]
+    );
+
+    // --------------------------------------------------------
+    // Store successful backend result.
+    // --------------------------------------------------------
+
+    const historyItem:
+      QueryHistoryItem = {
+      id:
+        `hist-${Date.now()}`,
+
+      queryText:
+        query,
+
+      observationsUsed:
+        activeObservations.map(
+          (observation) =>
+            observation.filename ||
+            observation.name
+        ),
+
+      analysisType:
+        result.task,
+
+      timestamp:
+        result.timestamp,
+
+      status:
+        'Complete',
+
+      confidence:
+        result.confidence,
+
+      resultSummary:
+        result.headline,
+
+      result,
     };
 
-    sessionHistory.unshift({
-      id: `hist-${Date.now()}`,
-      queryText,
-      observationsUsed: activeObservations.map(o => o.filename),
-      analysisType: customResult.task,
-      timestamp: customResult.timestamp,
-      status: 'Complete',
-      confidence: customResult.confidence,
-      resultSummary: customResult.headline,
-      result: customResult
-    });
+    sessionHistory.unshift(
+      historyItem
+    );
 
-    return customResult;
+    return result;
   },
 
-  // Helper methods to dynamically generate unique evidence per query intent
-  determineTask(q: string, inputMode: string): string {
-    if (q.includes('water') || q.includes('lake') || q.includes('ndwi') || q.includes('flood')) {
-      return 'Multispectral NDWI Water Index Grounding';
-    } else if (q.includes('ship') || q.includes('vessel') || q.includes('sar') || q.includes('maritime') || q.includes('port')) {
-      return 'SAR Cross-Modality Maritime Grounding & Tracking';
-    } else if (q.includes('vegetation') || q.includes('crop') || q.includes('forest') || q.includes('ndvi') || q.includes('canopy')) {
-      return 'Multispectral Crop & Forest Health Index Analysis';
-    } else if (q.includes('change') || q.includes('growth') || inputMode === 'bi_temporal') {
-      return 'Bi-Temporal Change Detection & Urban Expansion';
-    }
-    return 'Optical Visual Question Answering & Feature Localization';
-  },
 
-  generateHeadline(q: string): string {
-    if (q.includes('water') || q.includes('lake') || q.includes('ndwi')) {
-      return 'Water Body Surface Extent & Hydrological Boundary Mapped';
-    } else if (q.includes('ship') || q.includes('vessel') || q.includes('sar') || q.includes('port')) {
-      return 'Maritime Vessel Congestion & Polarized SAR Detection';
-    } else if (q.includes('vegetation') || q.includes('crop') || q.includes('ndvi') || q.includes('forest')) {
-      return 'NDVI Vegetation Density & Canopy Health Mapped';
-    } else if (q.includes('change') || q.includes('growth')) {
-      return 'Built-Up Land Surface Modification Detected (+14.2%)';
-    }
-    return 'Optical Grounding & Visual Scene Analysis Complete';
-  },
+  // ==========================================================
+  // GET HISTORY
+  // ==========================================================
 
-  generateAnswer(q: string, obs: Observation[]): string {
-    const obsNames = obs.map(o => o.name).join(', ') || 'selected observation';
-    if (q.includes('water') || q.includes('lake') || q.includes('ndwi')) {
-      return `Normalized Difference Water Index (NDWI) analysis over ${obsNames} delineated primary surface water bodies and exposed shoreline bathymetry. High moisture absorption confirmed in Near-Infrared bands.`;
-    } else if (q.includes('ship') || q.includes('vessel') || q.includes('sar') || q.includes('port')) {
-      return `Synthetic Aperture Radar (SAR) backscatter analysis over ${obsNames} isolated specular metallic reflections corresponding to docked and underway maritime vessels.`;
-    } else if (q.includes('vegetation') || q.includes('crop') || q.includes('ndvi') || q.includes('forest')) {
-      return `Near-Infrared (NIR) to Red band ratio calculations over ${obsNames} indicate dense canopy photosynthetic activity across active forest and agricultural zones.`;
-    } else if (q.includes('change') || q.includes('growth')) {
-      return `Bi-temporal feature comparison over ${obsNames} detected significant land cover modification, including new built-up footprints and infrastructure expansion.`;
-    }
-    return `Visual analysis of ${obsNames} completed for query "${q}". Primary ground features and structural elements localized with high model confidence.`;
-  },
+  async getHistory():
+    Promise<QueryHistoryItem[]> {
 
-  determineOverlayType(q: string, inputMode: string): 'change' | 'ndwi' | 'sar_fusion' | 'detection' {
-    if (q.includes('water') || q.includes('ndwi')) return 'ndwi';
-    if (q.includes('sar') || q.includes('ship') || inputMode === 'optical_sar') return 'sar_fusion';
-    if (q.includes('change') || inputMode === 'bi_temporal') return 'change';
-    return 'detection';
-  },
+    try {
 
-  selectModelsForQuery(q: string, inputMode: string): string[] {
-    if (q.includes('water') || q.includes('ndwi')) return ['SatQuery-Hydro-NDWI', 'SegmentAnything-Geo'];
-    if (q.includes('sar') || q.includes('ship') || inputMode === 'optical_sar') return ['SatQuery-FusedSAR-v4', 'RadarBackscatterNet'];
-    if (q.includes('change') || inputMode === 'bi_temporal') return ['SatQuery-ChangeNet-v2', 'FeatureAlign-Siamese'];
-    if (q.includes('vegetation') || q.includes('ndvi')) return ['SatQuery-NDVI-v2', 'Multispectral-CanopyNet'];
-    return ['SatQuery-VQA-v3.1', 'ResNet-GeoDetect-X'];
-  },
+      const backendData =
+        await fetchJson<{
+          history?: any[];
+        }>(
+          '/api/history'
+        );
 
-  generateDynamicEvidence(q: string, obs: Observation[]): EvidenceRegion[] {
-    if (q.includes('water') || q.includes('lake') || q.includes('ndwi') || q.includes('flood') || q.includes('river')) {
-      return [
-        {
-          id: `reg-water-1`,
-          label: 'Primary Reservoir Water Body',
-          coords: { x: 18, y: 22, width: 58, height: 50 },
-          areaEstimate: '388.2 km²',
-          confidence: 97,
-          type: 'water',
-          description: 'Deepwater lacustrine zone with clear NDWI spectral reflectance signature.',
-          metrics: [
-            { label: 'Mean NDWI', value: '+0.76' },
-            { label: 'Turbidity', value: 'Low (< 1.8 NTU)' }
-          ]
-        },
-        {
-          id: `reg-water-2`,
-          label: 'Exposed Shallow Shoreline',
-          coords: { x: 68, y: 15, width: 22, height: 35 },
-          areaEstimate: '24.4 km²',
-          confidence: 91,
-          type: 'water',
-          description: 'Exposed sediment flats resulting from seasonal water drawdown.',
-          metrics: [
-            { label: 'Moisture', value: '18%' },
-            { label: 'Substrate', value: 'Silicate Sand' }
-          ]
-        }
-      ];
-    } else if (q.includes('vegetation') || q.includes('crop') || q.includes('forest') || q.includes('ndvi') || q.includes('canopy') || q.includes('greenery')) {
-      return [
-        {
-          id: `reg-veg-1`,
-          label: 'Dense Forest Canopy Zone',
-          coords: { x: 20, y: 15, width: 40, height: 35 },
-          areaEstimate: '18.4 km²',
-          confidence: 95,
-          type: 'vegetation',
-          description: 'High NDVI NIR/Red ratio indicating healthy photosynthetic biomass.',
-          metrics: [
-            { label: 'Mean NDVI', value: '+0.78' },
-            { label: 'Canopy Health', value: 'Optimal (95%)' }
-          ]
-        },
-        {
-          id: `reg-veg-2`,
-          label: 'Active Agricultural Crop Plots',
-          coords: { x: 60, y: 40, width: 30, height: 38 },
-          areaEstimate: '12.1 km²',
-          confidence: 92,
-          type: 'vegetation',
-          description: 'Irrigated crop fields exhibiting uniform spectral vigor.',
-          metrics: [
-            { label: 'Crop Vigor Index', value: '88%' },
-            { label: 'Soil Moisture', value: 'Optimal' }
-          ]
-        },
-        {
-          id: `reg-veg-3`,
-          label: 'Vegetation Transition Perimeter',
-          coords: { x: 15, y: 60, width: 25, height: 25 },
-          areaEstimate: '5.2 km²',
-          confidence: 89,
-          type: 'vegetation',
-          description: 'Scrub and meadow boundary displaying moderate chlorophyll absorption.',
-          metrics: [
-            { label: 'Mean NDVI', value: '+0.42' }
-          ]
-        }
-      ];
-    } else if (q.includes('ship') || q.includes('vessel') || q.includes('sar') || q.includes('radar') || q.includes('port') || q.includes('maritime') || q.includes('sea')) {
-      return [
-        {
-          id: `reg-sar-1`,
-          label: 'Container Vessel ALPHA-01',
-          coords: { x: 28, y: 34, width: 14, height: 18 },
-          areaEstimate: '185m length',
-          confidence: 96,
-          type: 'detection',
-          description: 'High-intensity specular SAR radar return at North Pier.',
-          metrics: [
-            { label: 'Length', value: '185 meters' },
-            { label: 'SAR Backscatter', value: '-8.2 dB (Specular)' }
-          ]
-        },
-        {
-          id: `reg-sar-2`,
-          label: 'Liquid Bulk Tanker BRAVO-02',
-          coords: { x: 55, y: 48, width: 16, height: 20 },
-          areaEstimate: '210m length',
-          confidence: 94,
-          type: 'detection',
-          description: 'Moored tanker at Deepwater Berth 2.',
-          metrics: [
-            { label: 'Length', value: '210 meters' },
-            { label: 'Polarization', value: 'VV/VH Co-polarized' }
-          ]
-        },
-        {
-          id: `reg-sar-3`,
-          label: 'Port Cargo Berth Infrastructure',
-          coords: { x: 40, y: 22, width: 22, height: 25 },
-          areaEstimate: '0.45 km²',
-          confidence: 92,
-          type: 'built_up',
-          description: 'Metallic gantry crane and dock terminal structures.',
-          metrics: [
-            { label: 'Occupancy', value: 'High Density' }
-          ]
-        }
-      ];
-    } else if (q.includes('change') || q.includes('growth') || q.includes('urban') || q.includes('building')) {
-      return [
-        {
-          id: `reg-change-1`,
-          label: 'New Commercial Structure Foundation',
-          coords: { x: 30, y: 25, width: 20, height: 25 },
-          areaEstimate: '+2.8 km²',
-          confidence: 93,
-          type: 'change',
-          description: 'Paved foundation replacing open ground between baseline and target date.',
-          metrics: [
-            { label: 'Status', value: 'Built-Up Structure' },
-            { label: 'Confidence', value: '93%' }
-          ]
-        },
-        {
-          id: `reg-change-2`,
-          label: 'Northern Highway Transport Link',
-          coords: { x: 62, y: 15, width: 28, height: 18 },
-          areaEstimate: '+1.6 km²',
-          confidence: 89,
-          type: 'change',
-          description: 'Six-lane paved arterial extension.',
-          metrics: [
-            { label: 'Length', value: '4.2 km' }
-          ]
-        }
-      ];
-    }
+      if (
+        Array.isArray(
+          backendData.history
+        ) &&
+        backendData.history.length > 0
+      ) {
 
-    // Default VQA Grounding Evidence
-    return [
-      {
-        id: `reg-gen-1`,
-        label: 'Primary Feature Region',
-        coords: { x: 35, y: 30, width: 30, height: 30 },
-        areaEstimate: '4.2 km²',
-        confidence: 92,
-        type: 'detection',
-        description: `Grounded area for query: "${q}".`,
-        metrics: [
-          { label: 'Confidence', value: '92%' },
-          { label: 'Feature Class', value: 'Target Landmark' }
-        ]
-      },
-      {
-        id: `reg-gen-2`,
-        label: 'Peripheral Buffer Zone',
-        coords: { x: 15, y: 15, width: 25, height: 25 },
-        areaEstimate: '2.8 km²',
-        confidence: 86,
-        type: 'detection',
-        description: 'Surrounding spatial context.',
-        metrics: [
-          { label: 'Context', value: 'Low Reflectance' }
-        ]
+        return normalizeBackendHistory(
+          backendData.history
+        );
       }
-    ];
-  },
 
-  /**
-   * Retrieve query history
-   */
-  async getHistory(): Promise<QueryHistoryItem[]> {
-    return [...sessionHistory];
-  },
+    } catch (error) {
 
-  /**
-   * Get available model registry
-   */
-  async getModels(): Promise<{ name: string; type: string; accuracy: string; status: string }[]> {
+      console.warn(
+        'Backend history unavailable; returning session history.',
+        error
+      );
+    }
+
     return [
-      { name: 'SatQuery-VQA-v3.1', type: 'Visual Question Answering', accuracy: '94.2%', status: 'ONLINE' },
-      { name: 'SatQuery-ChangeNet-v2', type: 'Bi-Temporal Change Detection', accuracy: '89.6%', status: 'ONLINE' },
-      { name: 'SatQuery-Hydro-NDWI', type: 'Multispectral Water Grounding', accuracy: '96.8%', status: 'ONLINE' },
-      { name: 'SatQuery-FusedSAR-v4', type: 'Optical-SAR Cross-Modality', accuracy: '91.4%', status: 'ONLINE' },
-      { name: 'FeatureAlign-Siamese', type: 'Sub-Pixel Image Co-Registration', accuracy: '98.1%', status: 'ONLINE' }
+      ...sessionHistory,
     ];
   },
 
-  /**
-   * Search satellite data catalogue (CDSE Copernicus) via backend API
-   */
-  async searchSatelliteCatalogue(params: {
-    provider?: string;
-    bbox: number[];
-    start_date: string;
-    end_date: string;
-    collection?: string;
-    max_cloud_cover?: number;
-    limit?: number;
-  }): Promise<{ status: string; provider: string; count: number; products: any[] }> {
-    const response = await fetch('/api/data-sources/search', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        provider: params.provider || 'copernicus',
-        bbox: params.bbox,
-        start_date: params.start_date,
-        end_date: params.end_date,
-        collection: params.collection || 'sentinel-2-l2a',
-        max_cloud_cover: params.max_cloud_cover ?? null,
-        limit: params.limit || 10,
-      }),
-    });
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.detail || `CDSE search failed with HTTP ${response.status}`);
+  // ==========================================================
+  // GET MODEL REGISTRY
+  // ==========================================================
+
+  async getModels():
+    Promise<
+      {
+        name: string;
+        type: string;
+        accuracy: string;
+        status: string;
+      }[]
+    > {
+
+    try {
+
+      const data =
+        await fetchJson<{
+          models?: any[];
+        }>(
+          '/api/models'
+        );
+
+      const models =
+        Array.isArray(
+          data.models
+        )
+          ? data.models
+          : [];
+
+      return models.map(
+        (model: any) => ({
+          name:
+            String(
+              model.name ||
+              model.model_name ||
+              'Unnamed model'
+            ),
+
+          type:
+            String(
+              model.type ||
+              model.model_family ||
+              model.description ||
+              'Remote sensing model'
+            ),
+
+          accuracy:
+            formatModelAccuracy(
+              model.accuracy
+            ),
+
+          status:
+            normalizeModelStatus(
+              model.status
+            ),
+        })
+      );
+
+    } catch (error) {
+
+      console.warn(
+        'Backend model registry unavailable.',
+        error
+      );
+
+      // Do not return fictional model performance.
+      return [];
     }
-
-    return response.json();
   },
 
-  /**
-   * Get registered satellite data providers from backend
-   */
-  async getSatelliteProviders(): Promise<any[]> {
-    const response = await fetch('/api/data-sources/providers');
-    if (!response.ok) {
-      throw new Error('Failed to fetch satellite providers');
+
+  // ==========================================================
+  // SEARCH SATELLITE CATALOGUE
+  // ==========================================================
+
+  async searchSatelliteCatalogue(
+    params: {
+      provider?: string;
+
+      bbox: number[];
+
+      start_date: string;
+      end_date: string;
+
+      collection?: string;
+
+      max_cloud_cover?: number;
+
+      limit?: number;
     }
-    const data = await response.json();
-    return data.providers || [];
-  }
+  ): Promise<BackendSearchResponse> {
+
+    if (
+      !Array.isArray(
+        params.bbox
+      ) ||
+      params.bbox.length !== 4
+    ) {
+      throw new Error(
+        'A valid bounding box is required for satellite search.'
+      );
+    }
+
+    return fetchJson<BackendSearchResponse>(
+      '/api/data-sources/search',
+      {
+        method:
+          'POST',
+
+        headers: {
+          'Content-Type':
+            'application/json',
+        },
+
+        body:
+          JSON.stringify({
+            provider:
+              params.provider ||
+              'copernicus',
+
+            bbox:
+              params.bbox,
+
+            start_date:
+              params.start_date,
+
+            end_date:
+              params.end_date,
+
+            collection:
+              params.collection ||
+              'sentinel-2-l2a',
+
+            max_cloud_cover:
+              params.max_cloud_cover ??
+              null,
+
+            limit:
+              params.limit ||
+              10,
+          }),
+      }
+    );
+  },
+
+
+  // ==========================================================
+  // GET SATELLITE PROVIDERS
+  // ==========================================================
+
+  async getSatelliteProviders():
+    Promise<any[]> {
+
+    const data =
+      await fetchJson<{
+        providers?: any[];
+      }>(
+        '/api/data-sources/providers'
+      );
+
+    return Array.isArray(
+      data.providers
+    )
+      ? data.providers
+      : [];
+  },
+
+
+  // ==========================================================
+  // SATELLITE PROVIDER HEALTH
+  // ==========================================================
+
+  async getSatelliteProviderHealth():
+    Promise<any> {
+
+    return fetchJson<any>(
+      '/api/data-sources/health'
+    );
+  },
+
+
+  // ==========================================================
+  // GET CDSE PRODUCT
+  // ==========================================================
+
+  async getCopernicusProduct(
+    productId: string
+  ): Promise<any> {
+
+    if (
+      !productId ||
+      !productId.trim()
+    ) {
+      throw new Error(
+        'CDSE product ID is required.'
+      );
+    }
+
+    return fetchJson<any>(
+      `/api/data-sources/copernicus/product/${encodeURIComponent(
+        productId
+      )}`
+    );
+  },
+
+
+  // ==========================================================
+  // INGEST CDSE PRODUCT
+  // ==========================================================
+
+  async ingestCopernicusProduct(
+    productId: string,
+    modality: ModalityType = 'OPTICAL',
+    downloadProduct = true
+  ): Promise<Observation> {
+
+    if (
+      !productId ||
+      !productId.trim()
+    ) {
+      throw new Error(
+        'CDSE product ID is required.'
+      );
+    }
+
+    const response =
+      await fetchJson<BackendIngestResponse>(
+        '/api/data-sources/copernicus/ingest',
+        {
+          method:
+            'POST',
+
+          headers: {
+            'Content-Type':
+              'application/json',
+          },
+
+          body:
+            JSON.stringify({
+              product_id:
+                productId,
+
+              modality:
+                normalizeModalityForBackend(
+                  modality
+                ),
+
+              download_product:
+                downloadProduct,
+            }),
+        }
+      );
+
+    if (
+      !response.observation
+    ) {
+      throw new Error(
+        'CDSE ingestion succeeded but no observation was returned.'
+      );
+    }
+
+    const observation =
+      normalizeCDSEObservation(
+        response.observation,
+        modality
+      );
+
+    // Replace an existing observation with same ID.
+    userObservations =
+      userObservations.filter(
+        (item) =>
+          item.id !==
+          observation.id
+      );
+
+    userObservations.unshift(
+      observation
+    );
+
+    return observation;
+  },
+
+
+  // ==========================================================
+  // GET COPERNICUS QUICKLOOK URL
+  // ==========================================================
+
+  getCopernicusQuicklookUrl(
+    productId: string
+  ): string {
+
+    return (
+      `/api/data-sources/copernicus/quicklook/${encodeURIComponent(
+        productId
+      )}`
+    );
+  },
 };
+
+
+// ============================================================
+// LOCAL VALIDATION
+// ============================================================
+
+function validateFrontendObservations(
+  observations: Observation[],
+  inputMode: string
+): void {
+
+  if (
+    inputMode === 'bi_temporal' &&
+    observations.length !== 2
+  ) {
+    throw new Error(
+      'Bi-temporal analysis requires exactly two observations.'
+    );
+  }
+
+  if (
+    inputMode === 'optical_sar' &&
+    observations.length !== 2
+  ) {
+    throw new Error(
+      'Optical + SAR analysis requires exactly two observations.'
+    );
+  }
+
+  // Real observations must have backend-readable files.
+  for (
+    const observation
+    of observations
+  ) {
+
+    const sourceType =
+      String(
+        getObservationSourceType(
+          observation
+        ) || ''
+      ).toLowerCase();
+
+    const ingestionStatus =
+      String(
+        getObservationIngestionStatus(
+          observation
+        ) || ''
+      ).toLowerCase();
+
+    // Existing demos are allowed because their registered
+    // scenario/model pipeline can explicitly handle them.
+    if (
+      sourceType === 'demo' ||
+      (observation as any).isDemo === true
+    ) {
+      continue;
+    }
+
+    const filePath =
+      getObservationFilePath(
+        observation
+      );
+
+    if (!filePath) {
+      if (
+        ingestionStatus ===
+        'catalogue_only' ||
+        ingestionStatus ===
+        'metadata_only'
+      ) {
+        throw new Error(
+          `Observation "${observation.name}" is catalogue metadata only. ` +
+          `Ingest/download the satellite product before analysis.`
+        );
+      }
+
+      throw new Error(
+        `Observation "${observation.name}" is not connected to a ` +
+        `backend analysis file. Re-upload or ingest it first.`
+      );
+    }
+  }
+}
+
+
+// ============================================================
+// CDSE OBSERVATION NORMALIZATION
+// ============================================================
+
+function normalizeCDSEObservation(
+  raw: any,
+  modality: ModalityType
+): Observation {
+
+  const productId =
+    raw.product_id ||
+    raw.productId;
+
+  const quicklook =
+    raw.image_url ||
+    raw.imageUrl ||
+    raw.thumbnail_url ||
+    raw.thumbnailUrl ||
+    (
+      productId
+        ? satQueryService
+          .getCopernicusQuicklookUrl(
+            String(productId)
+          )
+        : ''
+    );
+
+  const acquisitionDate =
+    raw.acquisition_date ||
+    raw.acquisitionDate ||
+    null;
+
+  const localPath =
+    raw.file_path ||
+    raw.local_path ||
+    undefined;
+
+  const metadata =
+    isRecord(
+      raw.product_metadata
+    )
+      ? raw.product_metadata
+      : {};
+
+  return {
+    id:
+      raw.id ||
+      `cdse-${productId || Date.now()}`,
+
+    name:
+      raw.name ||
+      raw.filename ||
+      productId ||
+      'Copernicus observation',
+
+    filename:
+      raw.filename ||
+      raw.name ||
+      productId ||
+      'Copernicus observation',
+
+    modality:
+      modality,
+
+    date:
+      acquisitionDate
+        ? formatObservationDate(
+          acquisitionDate
+        )
+        : 'DATE NOT AVAILABLE',
+
+    dimensions:
+      formatDimensions(
+        raw.dimensions
+      ) || 'Unknown',
+
+    status:
+      localPath
+        ? 'READY'
+        : 'READY',
+
+    metadata: {
+      ...metadata,
+
+      sensor:
+        raw.sensor ||
+        raw.platform ||
+        metadata.platform,
+
+      lat:
+        calculateCenterLatitude(
+          raw.bbox ||
+          metadata.bbox
+        ),
+
+      lon:
+        calculateCenterLongitude(
+          raw.bbox ||
+          metadata.bbox
+        ),
+
+      cloudCover:
+        formatOptionalPercentage(
+          raw.cloud_cover ??
+          metadata.cloud_cover
+        ),
+
+      bands:
+        Array.isArray(
+          raw.available_bands
+        )
+          ? `${raw.available_bands.length} Channels (${raw.available_bands.join(', ')})`
+          : 'Band information unavailable',
+
+      groundSamplingDistance:
+        typeof raw.resolution === 'number'
+          ? `${raw.resolution}m/px`
+          : 'Not available',
+
+      acquisitionTime:
+        acquisitionDate
+          ? formatAcquisitionTime(
+            acquisitionDate
+          )
+          : 'Not available',
+
+      provider:
+        raw.provider ||
+        'copernicus',
+
+      productId:
+        productId,
+
+      product_id:
+        productId,
+
+      processingLevel:
+        raw.processing_level,
+
+      collection:
+        raw.collection,
+
+      crs:
+        raw.crs,
+
+      geoFootprint:
+        raw.geo_footprint,
+    },
+
+    imageUrl:
+      quicklook,
+
+    thumbnailUrl:
+      quicklook,
+
+    isDemo:
+      false,
+
+    ...((
+      {
+        filePath:
+          localPath,
+
+        file_path:
+          localPath,
+
+        localPath:
+          localPath,
+
+        local_path:
+          localPath,
+
+        sourceType:
+          raw.source_type ||
+          'copernicus',
+
+        source_type:
+          raw.source_type ||
+          'copernicus',
+
+        ingestionStatus:
+          raw.ingestion_status ||
+          (
+            localPath
+              ? 'downloaded'
+              : 'catalogue_only'
+          ),
+
+        ingestion_status:
+          raw.ingestion_status ||
+          (
+            localPath
+              ? 'downloaded'
+              : 'catalogue_only'
+          ),
+
+        acquisitionDate:
+          acquisitionDate,
+
+        acquisition_date:
+          acquisitionDate,
+
+        provider:
+          raw.provider ||
+          'copernicus',
+
+        productId:
+          productId,
+
+        product_id:
+          productId,
+      } as any
+    )),
+  } as Observation;
+}
+
+
+// ============================================================
+// HISTORY NORMALIZATION
+// ============================================================
+
+function normalizeBackendHistory(
+  items: any[]
+): QueryHistoryItem[] {
+
+  return items.map(
+    (
+      item,
+      index
+    ) => {
+
+      const fullResult =
+        isRecord(
+          item.full_result
+        )
+          ? backendToAnalysisResult(
+            item.full_result as BackendAnalysisResponse,
+            item.query || '',
+            []
+          )
+          : undefined;
+
+      return {
+        id:
+          String(
+            item.id ||
+            `hist-backend-${index}`
+          ),
+
+        queryText:
+          String(
+            item.query ||
+            ''
+          ),
+
+        observationsUsed:
+          Array.isArray(
+            item.observationsUsed
+          )
+            ? item.observationsUsed
+            : Array.isArray(
+              item.observations_used
+            )
+              ? item.observations_used
+              : [],
+
+        analysisType:
+          String(
+            item.task ||
+            item.analysisType ||
+            'SatQuery AI Analysis'
+          ),
+
+        timestamp:
+          String(
+            item.timestamp ||
+            ''
+          ),
+
+        status:
+          String(
+            item.status ||
+            'Complete'
+          ),
+
+        confidence:
+          normalizeConfidence(
+            item.confidence
+          ),
+
+        resultSummary:
+          String(
+            item.answer_summary ||
+            item.resultSummary ||
+            ''
+          ),
+
+        result:
+          fullResult ||
+          item.result,
+      } as QueryHistoryItem;
+    }
+  );
+}
+
+
+// ============================================================
+// FORMATTING HELPERS
+// ============================================================
+
+function formatDimensions(
+  dimensions:
+    | [number, number]
+    | number[]
+    | string
+    | undefined
+): string | undefined {
+
+  if (
+    typeof dimensions === 'string' &&
+    dimensions.trim()
+  ) {
+    return dimensions;
+  }
+
+  if (
+    Array.isArray(
+      dimensions
+    ) &&
+    dimensions.length >= 2
+  ) {
+    return (
+      `${dimensions[0]} × ${dimensions[1]}`
+    );
+  }
+
+  return undefined;
+}
+
+
+function formatObservationDate(
+  value: string
+): string {
+
+  const parsed =
+    new Date(value);
+
+  if (
+    Number.isNaN(
+      parsed.getTime()
+    )
+  ) {
+    return value;
+  }
+
+  return formatDate(
+    parsed
+  );
+}
+
+
+function formatAcquisitionTime(
+  value: string
+): string {
+
+  const parsed =
+    new Date(value);
+
+  if (
+    Number.isNaN(
+      parsed.getTime()
+    )
+  ) {
+    return 'Not available';
+  }
+
+  return (
+    `${parsed.toISOString().substring(11, 19)} UTC`
+  );
+}
+
+
+function formatOptionalPercentage(
+  value: unknown
+): string {
+
+  if (
+    value === null ||
+    value === undefined ||
+    value === ''
+  ) {
+    return 'Not available';
+  }
+
+  const numeric =
+    Number(value);
+
+  if (
+    Number.isFinite(
+      numeric
+    )
+  ) {
+    return `${numeric.toFixed(1)}%`;
+  }
+
+  return String(
+    value
+  );
+}
+
+
+function findMetadataValue(
+  object: Record<string, unknown>,
+  keys: string[]
+): unknown {
+
+  for (
+    const key of keys
+  ) {
+    if (
+      object[key] !== undefined &&
+      object[key] !== null
+    ) {
+      return object[key];
+    }
+  }
+
+  return undefined;
+}
+
+
+function calculateCenterLatitude(
+  bbox: unknown
+): number | undefined {
+
+  if (
+    !Array.isArray(
+      bbox
+    ) ||
+    bbox.length < 4
+  ) {
+    return undefined;
+  }
+
+  const minLat =
+    Number(bbox[1]);
+
+  const maxLat =
+    Number(bbox[3]);
+
+  if (
+    !Number.isFinite(minLat) ||
+    !Number.isFinite(maxLat)
+  ) {
+    return undefined;
+  }
+
+  return (
+    minLat +
+    maxLat
+  ) / 2;
+}
+
+
+function calculateCenterLongitude(
+  bbox: unknown
+): number | undefined {
+
+  if (
+    !Array.isArray(
+      bbox
+    ) ||
+    bbox.length < 4
+  ) {
+    return undefined;
+  }
+
+  const minLon =
+    Number(bbox[0]);
+
+  const maxLon =
+    Number(bbox[2]);
+
+  if (
+    !Number.isFinite(minLon) ||
+    !Number.isFinite(maxLon)
+  ) {
+    return undefined;
+  }
+
+  return (
+    minLon +
+    maxLon
+  ) / 2;
+}
+
+
+function formatModelAccuracy(
+  value: unknown
+): string {
+
+  if (
+    value === null ||
+    value === undefined ||
+    value === ''
+  ) {
+    return 'Not reported';
+  }
+
+  if (
+    typeof value === 'number' &&
+    Number.isFinite(value)
+  ) {
+
+    if (
+      value >= 0 &&
+      value <= 1
+    ) {
+      return `${Math.round(value * 100)}%`;
+    }
+
+    return `${value}%`;
+  }
+
+  return String(
+    value
+  );
+}
+
+
+function normalizeModelStatus(
+  value: unknown
+): string {
+
+  if (
+    !value
+  ) {
+    return 'AVAILABLE';
+  }
+
+  return String(
+    value
+  ).toUpperCase();
+}

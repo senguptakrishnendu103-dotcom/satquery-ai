@@ -2,6 +2,8 @@ import os
 from typing import Dict, Any, List, Optional
 
 from app.models.base_model import BaseRSModel
+from app.utils.image_resolver import ImageResolver
+
 
 
 class TextGuidedGroundingModel(BaseRSModel):
@@ -73,26 +75,45 @@ class TextGuidedGroundingModel(BaseRSModel):
         query: str,
         metadata: Dict[str, Any],
     ) -> Dict[str, Any]:
+        """
+        Execute text-guided spatial grounding.
+
+        A configured grounding checkpoint is required for a genuine grounding
+        result. The previous ImageResolver heuristic is intentionally not used as
+        a hidden substitute because that would make a heuristic look like a model
+        prediction.
+        """
+        start_time = time.perf_counter()
 
         self._validate_inputs(images, query)
 
         image = images[0]
 
-        # Load the actual grounding model lazily.
+        if not self.model_id:
+            raise RuntimeError(
+                "No grounding model is configured. "
+                "Set SATQUERY_GROUNDING_MODEL_ID before running OBJECT_GROUNDING."
+            )
+
         self._ensure_model_loaded()
 
-        # Extract the grounding target from the natural-language query.
-        grounding_prompt = self._build_grounding_prompt(query)
+        if self.model is None:
+            raise RuntimeError(
+                f"Grounding model '{self.model_id}' could not be initialized."
+            )
 
-        # Run actual grounding inference.
+        grounding_prompt = self._build_grounding_prompt(
+            query,
+            image=image,
+            metadata=metadata,
+        )
+
         grounding_result = self._run_grounding(
             image=image,
             prompt=grounding_prompt,
             metadata=metadata,
         )
 
-        # Normalize the result so the rest of SatQuery AI receives
-        # a consistent structure.
         normalized = self._normalize_grounding_result(
             grounding_result,
             image=image,
@@ -105,38 +126,50 @@ class TextGuidedGroundingModel(BaseRSModel):
 
         confidence = self._extract_confidence(normalized)
 
-        return {
-            "answer": answer,
-            "confidence": confidence,
+        inference_time_ms = round(
+            (time.perf_counter() - start_time) * 1000,
+            2,
+        )
 
-            "visual_evidence": {
-                "overlay_type": self._get_overlay_type(normalized),
-                "target_feature": normalized.get(
-                    "target_feature",
-                    self._extract_target(query),
-                ),
-                "boxes": normalized.get("boxes", []),
-                "masks": normalized.get("masks", []),
-                "highlight_color": "#00FF9D",
-                "coordinate_system": normalized.get(
-                    "coordinate_system",
-                    "pixel",
-                ),
-            },
-
-            "execution_details": {
-                "model_architecture": normalized.get(
-                    "model_architecture",
-                    self.name,
-                ),
-                "model_id": self.model_id,
-                "parameters_used": normalized.get(
-                    "parameters_used",
-                    {},
-                ),
-            },
-        }
-
+        return self.validate_result(
+            {
+                "answer": answer,
+                "confidence": confidence,
+                "visual_evidence": {
+                    "overlay_type": self._get_overlay_type(normalized),
+                    "target_feature": normalized.get(
+                        "target_feature",
+                        self._extract_target(query),
+                    ),
+                    "boxes": normalized.get("boxes", []),
+                    "masks": normalized.get("masks", []),
+                    "coordinate_system": normalized.get(
+                        "coordinate_system",
+                        "pixel",
+                    ),
+                },
+                "execution_details": {
+                    "model_architecture": normalized.get(
+                        "model_architecture",
+                        self.name,
+                    ),
+                    "model_id": self.model_id,
+                    "parameters_used": normalized.get(
+                        "parameters_used",
+                        {},
+                    ),
+                    "inference_time_ms": inference_time_ms,
+                    "execution_status": "completed",
+                    "input_asset": {
+                        "file_path": image.get("file_path"),
+                        "provider": image.get("provider"),
+                        "product_id": image.get("product_id"),
+                        "collection": image.get("collection"),
+                        "source_type": image.get("source_type"),
+                    },
+                },
+            }
+        )
     # ------------------------------------------------------------------
     # Validation
     # ------------------------------------------------------------------
@@ -164,19 +197,21 @@ class TextGuidedGroundingModel(BaseRSModel):
 
         image = images[0]
 
-        if not any(
-            image.get(key)
-            for key in (
-                "image",
-                "image_path",
-                "file_path",
-                "path",
-                "imageUrl",
-                "image_url",
-            )
-        ):
+        local_path = (
+            image.get("file_path")
+            or image.get("local_path")
+            or image.get("image_path")
+            or image.get("path")
+        )
+
+        if not local_path:
             raise ValueError(
-                "Grounding input does not contain an accessible image."
+                "Grounding input does not contain a model-readable local asset."
+            )
+
+        if isinstance(local_path, str) and not os.path.isfile(local_path):
+            raise FileNotFoundError(
+                f"Grounding raster does not exist: {local_path}"
             )
 
     # ------------------------------------------------------------------
@@ -185,74 +220,60 @@ class TextGuidedGroundingModel(BaseRSModel):
 
     def _ensure_model_loaded(self) -> None:
         """
-        Lazily load the configured grounding model.
+        Lazily load the configured grounding checkpoint.
 
-        Keeping loading lazy prevents model initialization during
-        application startup.
+        The checkpoint framework/format is intentionally not guessed.
         """
-
         if self.model is not None:
             return
 
         if not self.model_id:
             raise RuntimeError(
-                f"No grounding model configured. "
-                f"Set {self.MODEL_ENV} to a compatible model/checkpoint."
+                "SATQUERY_GROUNDING_MODEL_ID is not configured."
             )
 
         self._load_model()
 
     def _load_model(self) -> None:
         """
-        Concrete model initialization belongs here.
+        Concrete model-loading extension point.
 
-        This intentionally does not pretend that every YOLO-World/
-        transformer checkpoint has the same API.
+        Implement this once the selected grounding checkpoint/framework is
+        known (YOLO-World, Grounding DINO, OWL-ViT, Transformers, etc.).
         """
-
-        try:
-            import torch
-        except ImportError as exc:
-            raise RuntimeError(
-                "PyTorch is required for the grounding model."
-            ) from exc
-
-        try:
-            # The exact loader depends on the selected checkpoint.
-            #
-            # Example architecture:
-            #
-            # from ultralytics import YOLO
-            # self.model = YOLO(self.model_id)
-            #
-            # Do not uncomment this blindly unless the configured
-            # checkpoint is actually compatible with that API.
-
-            raise NotImplementedError(
-                "Connect _load_model() to the selected grounding "
-                f"checkpoint: {self.model_id}"
-            )
-
-        except Exception:
-            raise
+        raise NotImplementedError(
+            "The configured grounding model does not yet have a concrete "
+            f"inference adapter: {self.model_id}"
+        )
 
     # ------------------------------------------------------------------
     # Prompt construction
     # ------------------------------------------------------------------
 
-    def _build_grounding_prompt(self, query: str) -> str:
-        """
-        Convert the user's natural-language request into a concise
-        grounding prompt.
+    def _build_grounding_prompt(
+        self,
+        query: str,
+        image: Optional[Dict[str, Any]] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        image = image or {}
+        metadata = metadata or {}
 
-        The model itself performs the actual visual localization.
-        """
+        modality = image.get("modality") or "optical"
+        product_family = (
+            image.get("product_family")
+            or metadata.get("product_family")
+            or "unknown"
+        )
 
         return (
-            "Locate the physical feature requested by the user in the "
-            "remote-sensing image. Return only visually supported "
-            "detections.\n\n"
-            f"User query: {query.strip()}"
+            "You are a remote-sensing spatial grounding model. "
+            "Locate only the target requested by the user in the supplied "
+            "Earth-observation image. Return spatial evidence supported by "
+            "the image and do not invent detections.\n\n"
+            f"Modality: {modality}\n"
+            f"Product family: {product_family}\n"
+            f"Target request: {query.strip()}"
         )
 
     # ------------------------------------------------------------------
@@ -265,48 +286,21 @@ class TextGuidedGroundingModel(BaseRSModel):
         prompt: str,
         metadata: Dict[str, Any],
     ) -> Dict[str, Any]:
-
         """
-        Run the configured grounding model.
+        Concrete inference boundary.
 
-        Expected result format:
-
-        {
-            "boxes": [
-                {
-                    "x": ...,
-                    "y": ...,
-                    "w": ...,
-                    "h": ...,
-                    "label": "...",
-                    "confidence": ...
-                }
-            ],
-
-            "masks": [...],
-
-            "target_feature": "...",
-
-            "confidence": ...,
-
-            "coordinate_system": "pixel",
-
-            "parameters_used": {...}
-        }
-
-        The exact implementation depends on the selected model.
+        The configured model must return actual boxes/masks. No heuristic fallback
+        is silently substituted.
         """
-
         if self.model is None:
             raise RuntimeError(
-                "Grounding model has not been initialized."
+                "Grounding model is not initialized."
             )
 
         raise NotImplementedError(
-            "Implement model-specific grounding inference in "
-            "_run_grounding()."
+            "Implement the model-specific grounding call for "
+            f"'{self.model_id}'."
         )
-
     # ------------------------------------------------------------------
     # Result normalization
     # ------------------------------------------------------------------
@@ -364,6 +358,11 @@ class TextGuidedGroundingModel(BaseRSModel):
 
         else:
             normalized["confidence"] = 0.0
+
+        normalized.setdefault(
+            "model_architecture",
+            self.name,
+        )
 
         return normalized
 

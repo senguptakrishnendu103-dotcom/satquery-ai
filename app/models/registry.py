@@ -290,6 +290,53 @@ class ModelRegistry:
         return candidates
 
     # ==================================================================
+    # CAPABILITY REPORT
+    # ==================================================================
+
+    def capability_report(
+        self,
+        task: str,
+        input_type: str,
+    ) -> Dict[str, Any]:
+        """
+        Return an auditable capability report for the requested task/input.
+
+        This is useful to the API, agent audit panel, and debugging without
+        executing a model.
+        """
+        normalized_task = self._normalize_task(task)
+        normalized_input = self._normalize_input_type(input_type)
+
+        capable = self.find_capable_models(
+            normalized_task,
+            normalized_input,
+        )
+
+        return {
+            "task": normalized_task,
+            "input_type": normalized_input,
+            "available": bool(capable),
+            "candidates": [
+                {
+                    "name": model.name,
+                    "priority": self._get_priority(
+                        model,
+                        normalized_task,
+                    ),
+                    "supported_tasks": list(model.supported_tasks),
+                    "supported_input_types": list(
+                        model.supported_input_types
+                    ),
+                }
+                for model in self._rank_candidates(
+                    capable,
+                    normalized_task,
+                    normalized_input,
+                )
+            ],
+        }
+
+    # ==================================================================
     # PRIMARY MODEL SELECTION
     # ==================================================================
 
@@ -340,51 +387,37 @@ class ModelRegistry:
             return ranked[0]
 
         # --------------------------------------------------------------
-        # 2. Fallback: any model capable of the requested task.
+        # 2. Do NOT fall back to a task-only model if it cannot consume
+        #    the requested input configuration.
         #
-        # This preserves the behavior of the original registry.
+        # Returning an incompatible model here only causes a later
+        # capability failure in the orchestrator. An honest registry should
+        # return None and let the caller report that no compatible specialist
+        # is available.
         # --------------------------------------------------------------
 
-        task_candidates = []
-
-        for model in self._models.values():
-
-            if self._model_supports_task(
-                model,
-                normalized_task,
-            ):
-                task_candidates.append(
-                    model
-                )
-
-        if task_candidates:
-            ranked = self._rank_candidates(
-                task_candidates,
-                normalized_task,
-                normalized_input,
-            )
-
-            return ranked[0]
-
         # --------------------------------------------------------------
-        # 3. General VQA fallback.
+        # 3. General VQA fallback only when it can consume this input type.
         # --------------------------------------------------------------
 
         fallback = self.get_model(
             self.FALLBACK_MODEL_NAME
         )
 
-        if fallback:
+        if fallback and self._model_can_handle(
+            fallback,
+            "SINGLE_IMAGE_VQA",
+            normalized_input,
+        ):
             return fallback
 
         # --------------------------------------------------------------
-        # 4. Last-resort fallback.
-        #
-        # This makes the registry resilient if the configured fallback
-        # model is not registered.
+        # 4. Find any general fallback with the requested input capability.
         # --------------------------------------------------------------
 
-        return self._find_general_fallback()
+        return self._find_general_fallback(
+            input_type=normalized_input
+        )
 
     # ==================================================================
     # BEST CANDIDATE RANKING
@@ -480,28 +513,33 @@ class ModelRegistry:
         remain compatible.
         """
 
+        normalized_task = str(task).strip().upper()
+        normalized_input = str(input_type).strip().lower()
+
         try:
-            return model.can_handle(
-                task,
-                input_type,
+            return bool(
+                model.can_handle(
+                    normalized_task,
+                    normalized_input,
+                )
             )
         except (
             AttributeError,
             TypeError,
         ):
             supported_tasks = [
-                str(item).upper()
+                str(item).strip().upper()
                 for item in model.supported_tasks
             ]
 
             supported_inputs = [
-                str(item).lower()
+                str(item).strip().lower()
                 for item in model.supported_input_types
             ]
 
             return (
-                task in supported_tasks
-                and input_type in supported_inputs
+                normalized_task in supported_tasks
+                and normalized_input in supported_inputs
             )
 
     @staticmethod
@@ -612,16 +650,33 @@ class ModelRegistry:
         )
 
         # Additional registry metadata.
-        info[
-            "routing_priority"
-        ] = self._get_priority(
-            model,
-            "UNKNOWN",
+        model_tasks = list(model.supported_tasks)
+        priority_task = (
+            str(model_tasks[0]).upper()
+            if model_tasks
+            else "UNKNOWN"
         )
 
-        info[
-            "registered"
-        ] = True
+        info["routing_priority"] = self._get_priority(
+            model,
+            priority_task,
+        )
+
+        info["registered"] = True
+        info["capabilities"] = {
+            "geotiff": bool(
+                getattr(model, "supports_geotiff", False)
+            ),
+            "multispectral": bool(
+                getattr(model, "supports_multispectral", False)
+            ),
+            "sar": bool(
+                getattr(model, "supports_sar", False)
+            ),
+            "geospatial_input": bool(
+                getattr(model, "requires_geospatial_input", False)
+            ),
+        }
 
         return info
 
@@ -657,39 +712,45 @@ class ModelRegistry:
 
     def _find_general_fallback(
         self,
+        input_type: str = "single_optical",
     ) -> Optional[BaseRSModel]:
         """
-        Find a reasonable general-purpose model if the configured
-        fallback model isn't registered.
+        Find a general-purpose fallback that can actually consume the
+        requested input type.
 
         Preference:
             1. SINGLE_IMAGE_VQA
             2. IMAGE_CAPTIONING
-            3. First registered model
+            3. Any compatible registered model
+
+        An incompatible model is never returned.
         """
 
-        for model in self._models.values():
+        normalized_input = self._normalize_input_type(input_type)
 
-            if self._model_supports_task(
+        for model in self._models.values():
+            if self._model_can_handle(
                 model,
                 "SINGLE_IMAGE_VQA",
+                normalized_input,
             ):
                 return model
 
         for model in self._models.values():
-
-            if self._model_supports_task(
+            if self._model_can_handle(
                 model,
                 "IMAGE_CAPTIONING",
+                normalized_input,
             ):
                 return model
 
-        if self._models:
-            return next(
-                iter(
-                    self._models.values()
-                )
-            )
+        for model in self._models.values():
+            supported_inputs = [
+                str(item).lower()
+                for item in model.supported_input_types
+            ]
+            if normalized_input in supported_inputs:
+                return model
 
         return None
 

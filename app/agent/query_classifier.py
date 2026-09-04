@@ -122,6 +122,25 @@ class QueryClassifier:
         "what is shown",
     )
 
+    SAR_TERMS = (
+        "sar",
+        "radar",
+        "backscatter",
+        "vv",
+        "vh",
+        "hh",
+        "hv",
+    )
+
+    SPECTRAL_INDEX_TERMS = (
+        "ndwi",
+        "ndbi",
+        "spectral index",
+        "water index",
+        "built-up index",
+        "built up index",
+    )
+
     GROUNDING_TERMS = (
         "where is",
         "where are",
@@ -348,7 +367,58 @@ class QueryClassifier:
             )
 
         # ==============================================================
-        # 3. WATER DETECTION
+        # 3. EXPLICIT SPECTRAL-INDEX REQUESTS
+        # ==============================================================
+        #
+        # Explicit NDWI/NDBI requests should route directly to their
+        # deterministic spectral tools, regardless of whether the query also
+        # contains generic words such as "what" or "compare".
+        #
+
+        if self._contains_any(q, ("ndwi", "water index")):
+            if not has_optical_family:
+                return self._result(
+                    task="WATER_DETECTION",
+                    reasoning=(
+                        "Detected an explicit NDWI/water-index request; "
+                        "an optical or multispectral observation is required."
+                    ),
+                    confidence=0.98,
+                    detected_intent="NDWI_WATER_ANALYSIS",
+                    target="water bodies",
+                    temporal=False,
+                    modalities=normalized_modalities,
+                    observation_count=observation_count,
+                    input_mode=mode,
+                )
+
+            return self._result(
+                task="WATER_DETECTION",
+                reasoning="Detected an explicit NDWI/water-index request.",
+                confidence=0.99,
+                detected_intent="NDWI_WATER_ANALYSIS",
+                target="water bodies",
+                temporal=False,
+                modalities=normalized_modalities,
+                observation_count=observation_count,
+                input_mode=mode,
+            )
+
+        if self._contains_any(q, ("ndbi", "built-up index", "built up index")):
+            return self._result(
+                task="BUILT_UP_ANALYSIS",
+                reasoning="Detected an explicit NDBI/built-up-index request.",
+                confidence=0.99,
+                detected_intent="NDBI_BUILT_UP_ANALYSIS",
+                target="built-up / urban regions",
+                temporal=False,
+                modalities=normalized_modalities,
+                observation_count=observation_count,
+                input_mode=mode,
+            )
+
+        # ==============================================================
+        # 4. WATER DETECTION
         #
         # Water is checked before generic grounding/VQA so:
         #
@@ -400,7 +470,7 @@ class QueryClassifier:
             )
 
         # ==============================================================
-        # 4. BUILT-UP / URBAN ANALYSIS
+        # 5. BUILT-UP / URBAN ANALYSIS
         # ==============================================================
 
         builtup_target = self._contains_any(
@@ -448,7 +518,7 @@ class QueryClassifier:
             )
 
         # ==============================================================
-        # 5. OBJECT GROUNDING
+        # 6. OBJECT GROUNDING
         # ==============================================================
 
         if self._contains_any(
@@ -471,7 +541,7 @@ class QueryClassifier:
             )
 
         # ==============================================================
-        # 6. IMAGE CAPTIONING / SCENE DESCRIPTION
+        # 7. IMAGE CAPTIONING / SCENE DESCRIPTION
         # ==============================================================
 
         if self._contains_any(
@@ -494,7 +564,7 @@ class QueryClassifier:
             )
 
         # ==============================================================
-        # 7. GENERAL SINGLE-IMAGE VQA
+        # 8. GENERAL SINGLE-IMAGE VQA
         # ==============================================================
 
         if self._contains_any(
@@ -517,7 +587,7 @@ class QueryClassifier:
             )
 
         # ==============================================================
-        # 8. SAFE DEFAULT
+        # 9. SAFE DEFAULT
         # ==============================================================
 
         return self._result(
@@ -721,6 +791,15 @@ class QueryClassifier:
             "over time",
             "between dates",
             "between years",
+            "across time",
+            "historical",
+            "recent",
+            "latest",
+            "then and now",
+            "pre-event",
+            "post-event",
+            "pre event",
+            "post event",
             "from 2024",
             "from 2025",
             "from 2026",
@@ -793,6 +872,31 @@ class QueryClassifier:
             ),
         ):
             return "buildings"
+
+        if self._contains_any(
+            query,
+            (
+                "ship",
+                "ships",
+                "vessel",
+                "vessels",
+                "boat",
+                "boats",
+            ),
+        ):
+            return "ships / vessels"
+
+        if self._contains_any(
+            query,
+            (
+                "solar",
+                "solar panel",
+                "solar panels",
+                "panel",
+                "panels",
+            ),
+        ):
+            return "solar infrastructure"
 
         return None
 
