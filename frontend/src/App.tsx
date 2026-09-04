@@ -228,9 +228,7 @@ export function App() {
           <LandingPage
             workflowRef={workflowRef}
             onEnterWorkspace={() => setActiveView('WORKSPACE')}
-            onViewDemo={() => {
-              handleSelectDemoScenario(DEMO_SCENARIOS[2]);
-            }}
+            onViewDemo={() => setIsDemoModalOpen(true)}
           />
         )}
 
