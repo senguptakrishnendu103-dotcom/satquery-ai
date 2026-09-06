@@ -268,21 +268,22 @@ class ExecutionTracker:
         return "Execution stage completed"
 
     @staticmethod
-    def _normalize_confidence(confidence: Any) -> int:
+    def _normalize_confidence(confidence: Any) -> Any:
         """
         Normalize confidence to the frontend's 0-100 range.
-
-        Supports:
-            0.91
-            91
-            "0.91"
-            "91"
+        If confidence is None, unavailable, or invalid, return None (not 0 or a fabricated score).
         """
+        if confidence is None:
+            return None
+
+        val_str = str(confidence).strip().lower()
+        if val_str in {"none", "null", "unavailable", "n/a", ""}:
+            return None
 
         try:
             value = float(confidence)
         except (TypeError, ValueError):
-            return 0
+            return None
 
         if 0.0 <= value <= 1.0:
             value *= 100.0

@@ -4,15 +4,11 @@ import uuid
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 
-import requests
-
 from fastapi import (
     FastAPI,
     File,
     UploadFile,
-    Form,
     HTTPException,
-    Response,
 )
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -22,13 +18,26 @@ from app.agent.orchestrator import agent_orchestrator
 from app.models.registry import registry_instance
 from app.utils.metadata_extractor import MetadataExtractor
 from app.utils.raster_ingestor import RasterIngestor
+from app.utils.image_resolver import ImageResolver
 from app.demo.datasets import DEMO_SCENARIOS
-
-from app.data_sources import (
-    satellite_search_service,
-    SatelliteSearchError,
+from app.resources.sih_registry import (
+    sih_resource_registry,
+    ResourceNotConfiguredError,
+    SampleNotFoundError,
+    InvalidSampleFileError,
+    SIHResourceError,
+)
+from app.providers import (
+    get_provider,
+    list_providers,
+    SearchRequest,
+    ProviderError,
+    ProviderAuthError,
+    ProviderRateLimitError,
+    ProductNotFoundError,
+    ProductNotAvailableError,
+    ProviderNetworkError,
     InvalidSearchRequestError,
-    ProviderNotFoundError,
 )
 
 
@@ -68,12 +77,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 APP_DIR = BASE_DIR / "app"
 STATIC_DIR = APP_DIR / "static"
 UPLOAD_DIR = STATIC_DIR / "uploads"
-CDSE_PRODUCT_DIR = UPLOAD_DIR / "cdse_products"
 
 FRONTEND_DIST_DIR = BASE_DIR / "frontend" / "dist"
 
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-CDSE_PRODUCT_DIR.mkdir(parents=True, exist_ok=True)
 
 
 # ============================================================
@@ -107,21 +114,6 @@ ANALYSIS_HISTORY: List[Dict[str, Any]] = []
 # CONFIGURATION
 # ============================================================
 
-CDSE_CATALOGUE_URL = (
-    "https://catalogue.dataspace.copernicus.eu"
-    "/odata/v1/Products"
-)
-
-CDSE_DOWNLOAD_URL = (
-    "https://download.dataspace.copernicus.eu"
-    "/odata/v1/Products"
-)
-
-CDSE_TOKEN_URL = (
-    "https://identity.dataspace.copernicus.eu"
-    "/auth/realms/CDSE/protocol/openid-connect/token"
-)
-
 MAX_UPLOAD_SIZE_MB = int(
     os.getenv("SATQUERY_MAX_UPLOAD_MB", "500")
 )
@@ -130,7 +122,7 @@ MAX_UPLOAD_SIZE_BYTES = MAX_UPLOAD_SIZE_MB * 1024 * 1024
 
 
 # ============================================================
-# REQUEST MODELS
+# SCHEMAS
 # ============================================================
 
 class AnalyzeRequest(BaseModel):
@@ -146,27 +138,26 @@ class AnalyzeRequest(BaseModel):
     images: List[Dict[str, Any]]
 
 
-class SatelliteSearchApiRequest(BaseModel):
-    provider: str = "copernicus"
-
-    bbox: List[float]
-
-    start_date: str
-    end_date: str
-
-    collection: str = "sentinel-2-l2a"
-
-    max_cloud_cover: Optional[float] = None
-
+class DataSearchRequest(BaseModel):
+    provider: str = Field(default="bhoonidhi")
+    collections: List[str] = Field(default_factory=list)
+    bbox: Optional[List[float]] = None
+    datetime_range: Optional[str] = None
     limit: int = Field(default=10, ge=1, le=100)
+    filters: Dict[str, Any] = Field(default_factory=dict)
 
 
-class CopernicusIngestRequest(BaseModel):
+class DataDownloadRequest(BaseModel):
+    provider: str = Field(default="bhoonidhi")
     product_id: str
+    collection: Optional[str] = None
+    force_redownload: bool = False
 
-    modality: str = "optical"
 
-    download_product: bool = False
+class SIHLoadRequest(BaseModel):
+    resource_id: str
+    sample_id: str
+    pair_mode: bool = False
 
 
 # ============================================================
@@ -391,8 +382,8 @@ def validate_analysis_images(
         ).lower()
 
         # Demo observations are the only observations allowed to proceed
-        # without a model-readable raster. A thumbnail/quicklook is display
-        # media, not an analysis asset. A Copernicus product is model-ready
+        # without a model-readable raster. A thumbnail/preview is display
+        # media, not an analysis asset. An observation product is model-ready
         # only when an actual local or explicitly resolvable analysis asset
         # is present.
         if source_type in ("demo", "sample"):
@@ -427,8 +418,8 @@ def validate_analysis_images(
                         image.get("name", "unknown"),
                     ),
                     "hint": (
-                        "Upload the GeoTIFF/TIFF or ingest the "
-                        "CDSE product before running analysis."
+                        "Upload the GeoTIFF/TIFF raster file "
+                        "before running analysis."
                     ),
                 },
             )
@@ -443,675 +434,6 @@ def validate_analysis_images(
             )
 
     return normalized_images
-
-
-def get_cdse_access_token() -> Optional[str]:
-    """
-    Obtain a CDSE access token using backend-only environment
-    variables.
-
-    Required only for authenticated product downloads.
-
-    NEVER expose these credentials to the frontend.
-    """
-
-    username = os.getenv("CDSE_USERNAME")
-    password = os.getenv("CDSE_PASSWORD")
-
-    if not username or not password:
-        return None
-
-    response = requests.post(
-        CDSE_TOKEN_URL,
-        data={
-            "client_id": "cdse-public",
-            "grant_type": "password",
-            "username": username,
-            "password": password,
-        },
-        timeout=30,
-    )
-
-    if response.status_code != 200:
-        raise RuntimeError(
-            f"CDSE authentication failed: HTTP {response.status_code}"
-        )
-
-    payload = response.json()
-
-    token = payload.get("access_token")
-
-    if not token:
-        raise RuntimeError(
-            "CDSE authentication succeeded but no access_token was returned."
-        )
-
-    return token
-
-
-def get_cdse_product(product_id: str) -> Dict[str, Any]:
-    """
-    Retrieve one genuine CDSE product and its Assets.
-    """
-
-    clean_id = product_id.strip()
-
-    if not clean_id:
-        raise HTTPException(
-            status_code=400,
-            detail="CDSE product_id cannot be empty.",
-        )
-
-    url = (
-        f"{CDSE_CATALOGUE_URL}"
-        f"({clean_id})"
-        "?$expand=Assets"
-    )
-
-    try:
-        response = requests.get(
-            url,
-            timeout=30,
-        )
-    except requests.RequestException as exc:
-        raise HTTPException(
-            status_code=502,
-            detail=f"CDSE catalogue request failed: {exc}",
-        )
-
-    if response.status_code != 200:
-        raise HTTPException(
-            status_code=404,
-            detail=(
-                f"CDSE product '{clean_id}' could not be retrieved. "
-                f"HTTP {response.status_code}"
-            ),
-        )
-
-    return response.json()
-
-
-def find_quicklook_asset(
-    product: Dict[str, Any],
-) -> Optional[Dict[str, Any]]:
-    """
-    Find the genuine QUICKLOOK asset returned by CDSE.
-    """
-
-    assets = product.get("Assets") or []
-
-    for asset in assets:
-        asset_type = str(
-            asset.get("Type", "")
-        ).upper()
-
-        asset_name = str(
-            asset.get("Name", "")
-        ).upper()
-
-        if (
-            asset_type == "QUICKLOOK"
-            or asset_name == "QUICKLOOK"
-        ):
-            return asset
-
-    return None
-
-
-def product_to_observation(
-    product: Dict[str, Any],
-    modality: str,
-    quicklook_url: Optional[str],
-    local_product_path: Optional[str] = None,
-    ingestion_manifest: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
-    """
-    Convert a CDSE catalogue product into the observation
-    contract expected by the frontend/orchestrator.
-    """
-
-    product_id = product.get("Id")
-    product_name = product.get("Name")
-
-    content_date = product.get("ContentDate") or {}
-
-    acquisition_date = (
-        content_date.get("Start")
-        if isinstance(content_date, dict)
-        else None
-    )
-
-    collection = product.get("Collection") or {}
-
-    collection_name = (
-        collection.get("Name")
-        if isinstance(collection, dict)
-        else None
-    )
-
-    manifest = ingestion_manifest or {}
-
-    # Prefer the model-ready asset created by RasterIngestor.
-    model_file_path = (
-        manifest.get("model_file_path")
-        or manifest.get("local_path")
-        or local_product_path
-    )
-
-    band_map = manifest.get("band_map") or {}
-    assets = manifest.get("assets") or []
-
-    observation: Dict[str, Any] = {
-        "id": f"cdse_{product_id}",
-        "product_id": product_id,
-        "filename": product_name,
-        "name": product_name,
-
-        "source_type": "copernicus",
-        "provider": "copernicus",
-        "isDemo": False,
-
-        "modality": modality,
-        "collection": collection_name,
-
-        "acquisition_date": acquisition_date,
-        "acquisitionDate": acquisition_date,
-
-        "image_url": quicklook_url or "",
-        "imageUrl": quicklook_url or "",
-
-        "thumbnail_url": quicklook_url or "",
-        "thumbnailUrl": quicklook_url or "",
-
-        "product_metadata": product,
-
-        # Critical: actual model-ready local raster.
-        "file_path": model_file_path,
-        "local_path": model_file_path,
-
-        # Real ingestion information for downstream routing/models.
-        "ingestion_manifest": manifest or None,
-        "band_map": band_map,
-        "assets": assets,
-        "analysis_asset": manifest.get("analysis_asset"),
-        "display_asset": manifest.get("display_asset"),
-        "extraction_dir": manifest.get("extraction_dir"),
-        "safe_root": manifest.get("safe_root"),
-        "product_family": manifest.get("product_family"),
-
-        "crs": product.get("CRS"),
-        "footprint": product.get("Footprint"),
-        "geofootprint": product.get("GeoFootprint"),
-        "s3_path": product.get("S3Path"),
-
-        "ingestion_status": (
-            "ready"
-            if model_file_path and manifest
-            else ("downloaded" if local_product_path else "catalogue_only")
-        ),
-    }
-
-    # Promote selected semantic raster paths for code that expects flat fields.
-    if isinstance(band_map, dict):
-        for semantic, info in band_map.items():
-            if isinstance(info, dict) and info.get("path"):
-                observation[semantic] = info["path"]
-
-    return observation
-
-
-# ============================================================
-# HEALTH
-# ============================================================
-
-@app.get("/api/health")
-def health_check():
-    return {
-        "status": "online",
-        "platform": "SatQuery AI",
-        "tagline": "Ask questions. Understand Earth.",
-        "version": "1.1.0",
-    }
-
-
-# ============================================================
-# PROVIDERS
-# ============================================================
-
-@app.get("/api/data-sources/providers")
-def list_satellite_providers():
-    """
-    Return registered satellite data providers.
-    """
-
-    return {
-        "providers": satellite_search_service.list_providers()
-    }
-
-
-# ============================================================
-# SATELLITE SEARCH
-# ============================================================
-
-@app.post("/api/data-sources/search")
-def search_satellite_data(
-    req: SatelliteSearchApiRequest,
-):
-    """
-    Search an external satellite catalogue.
-
-    The search result is metadata only.
-    Actual raster ingestion happens separately.
-    """
-
-    if len(req.bbox) != 4:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "bbox must contain exactly four values: "
-                "[min_lon, min_lat, max_lon, max_lat]"
-            ),
-        )
-
-    min_lon, min_lat, max_lon, max_lat = req.bbox
-
-    if min_lon >= max_lon or min_lat >= max_lat:
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid bbox coordinates.",
-        )
-
-    if req.max_cloud_cover is not None:
-        if not 0 <= req.max_cloud_cover <= 100:
-            raise HTTPException(
-                status_code=400,
-                detail="max_cloud_cover must be between 0 and 100.",
-            )
-
-    try:
-        results = satellite_search_service.search(
-            provider=req.provider,
-            request={
-                "bbox": req.bbox,
-                "start_date": req.start_date,
-                "end_date": req.end_date,
-                "collection": req.collection,
-                "max_cloud_cover": req.max_cloud_cover,
-                "limit": req.limit,
-            },
-        )
-
-        return {
-            "status": "success",
-            "provider": req.provider,
-            "count": len(results),
-            "products": [
-                prod.model_dump()
-                for prod in results
-            ],
-        }
-
-    except InvalidSearchRequestError as exc:
-        raise HTTPException(
-            status_code=400,
-            detail=str(exc),
-        )
-
-    except ProviderNotFoundError as exc:
-        raise HTTPException(
-            status_code=404,
-            detail=str(exc),
-        )
-
-    except SatelliteSearchError as exc:
-        raise HTTPException(
-            status_code=502,
-            detail=(
-                f"Satellite provider search failed: {exc}"
-            ),
-        )
-
-    except Exception as exc:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Internal search error: {exc}",
-        )
-
-
-# ============================================================
-# CDSE PRODUCT DETAILS
-# ============================================================
-
-@app.get(
-    "/api/data-sources/copernicus/product/{product_id}"
-)
-def get_copernicus_product(product_id: str):
-    """
-    Return genuine CDSE product metadata including assets.
-    """
-
-    product = get_cdse_product(product_id)
-
-    quicklook = find_quicklook_asset(product)
-
-    return {
-        "status": "success",
-        "product": product,
-        "quicklook": quicklook,
-    }
-
-
-# ============================================================
-# CDSE QUICKLOOK
-# ============================================================
-
-@app.get(
-    "/api/data-sources/copernicus/quicklook/{product_id}"
-)
-def get_copernicus_quicklook(product_id: str):
-    """
-    Proxy the genuine CDSE QUICKLOOK asset.
-
-    IMPORTANT:
-    Products(<id>)/$value is a product download endpoint.
-    Quicklooks are exposed as Assets(<asset_id>)/$value.
-    """
-
-    product = get_cdse_product(product_id)
-
-    quicklook = find_quicklook_asset(product)
-
-    if not quicklook:
-        raise HTTPException(
-            status_code=404,
-            detail=(
-                "This CDSE product does not expose "
-                "a QUICKLOOK asset."
-            ),
-        )
-
-    asset_id = quicklook.get("Id")
-
-    if not asset_id:
-        raise HTTPException(
-            status_code=404,
-            detail="CDSE QUICKLOOK asset has no asset ID.",
-        )
-
-    url = (
-        f"{CDSE_CATALOGUE_URL.rsplit('/Products', 1)[0]}"
-        f"/Assets({asset_id})/$value"
-    )
-
-    cache_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static", "uploads")
-    os.makedirs(cache_dir, exist_ok=True)
-    cache_path = os.path.join(cache_dir, f"quicklook_{product_id}.jpg")
-
-    if os.path.isfile(cache_path):
-        try:
-            with open(cache_path, "rb") as f:
-                content = f.read()
-            return Response(content=content, media_type="image/jpeg")
-        except Exception:
-            pass
-
-    try:
-        response = requests.get(
-            url,
-            timeout=30,
-        )
-    except requests.RequestException as exc:
-        raise HTTPException(
-            status_code=502,
-            detail=f"CDSE quicklook request failed: {exc}",
-        )
-
-    if response.status_code != 200:
-        raise HTTPException(
-            status_code=404,
-            detail=(
-                "CDSE quicklook unavailable. "
-                f"HTTP {response.status_code}"
-            ),
-        )
-
-    try:
-        with open(cache_path, "wb") as f:
-            f.write(response.content)
-    except Exception:
-        pass
-
-    media_type = (
-        response.headers.get(
-            "content-type",
-            "image/jpeg",
-        )
-    )
-
-    return Response(
-        content=response.content,
-        media_type=media_type,
-    )
-
-
-# ============================================================
-# CDSE PRODUCT INGESTION
-# ============================================================
-
-@app.post(
-    "/api/data-sources/copernicus/ingest"
-)
-def ingest_copernicus_product(
-    req: CopernicusIngestRequest,
-):
-    """
-    Select a real CDSE catalogue product and optionally download + extract
-    its actual raster assets.
-
-    download_product=True:
-      CDSE product ZIP
-          -> local ZIP
-          -> safe SAFE extraction
-          -> Sentinel-1/Sentinel-2 raster discovery
-          -> analysis-ready manifest
-          -> model-ready observation
-    """
-
-    allowed_modalities = {"optical", "sar", "optical_sar", "multispectral"}
-    modality = req.modality.strip().lower()
-
-    if modality == "multispectral":
-        modality = "optical"
-
-    if modality not in allowed_modalities:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                f"Unsupported modality '{req.modality}'. "
-                f"Expected one of: {sorted(allowed_modalities)}"
-            ),
-        )
-
-    product = get_cdse_product(req.product_id)
-
-    quicklook = find_quicklook_asset(product)
-    quicklook_url = None
-
-    if quicklook and quicklook.get("Id"):
-        quicklook_url = (
-            "/api/data-sources/copernicus/"
-            f"quicklook/{req.product_id}"
-        )
-
-    local_archive_path: Optional[str] = None
-    ingestion_manifest: Optional[Dict[str, Any]] = None
-
-    if req.download_product:
-        token = get_cdse_access_token()
-
-        if not token:
-            raise HTTPException(
-                status_code=503,
-                detail=(
-                    "CDSE product download is not configured. "
-                    "Set CDSE_USERNAME and CDSE_PASSWORD on the "
-                    "backend server."
-                ),
-            )
-
-        product_id = product.get("Id")
-        download_url = (
-            f"{CDSE_DOWNLOAD_URL}"
-            f"({product_id})/$value"
-        )
-
-        product_name = safe_filename(
-            product.get("Name") or f"{product_id}.zip"
-        )
-
-        if not Path(product_name).suffix:
-            product_name += ".zip"
-
-        destination = UPLOAD_DIR / (
-            f"cdse_{uuid.uuid4().hex}_"
-            f"{product_name}"
-        )
-
-        try:
-            with requests.get(
-                download_url,
-                headers={
-                    "Authorization": f"Bearer {token}"
-                },
-                stream=True,
-                timeout=120,
-            ) as response:
-
-                if response.status_code != 200:
-                    raise HTTPException(
-                        status_code=502,
-                        detail=(
-                            "CDSE product download failed. "
-                            f"HTTP {response.status_code}"
-                        ),
-                    )
-
-                with open(destination, "wb") as output:
-                    total_bytes = 0
-
-                    for chunk in response.iter_content(
-                        chunk_size=1024 * 1024
-                    ):
-                        if not chunk:
-                            continue
-
-                        total_bytes += len(chunk)
-
-                        if total_bytes > MAX_UPLOAD_SIZE_BYTES:
-                            try:
-                                destination.unlink()
-                            except OSError:
-                                pass
-
-                            raise HTTPException(
-                                status_code=413,
-                                detail=(
-                                    "Downloaded CDSE product exceeds the "
-                                    f"configured maximum size of "
-                                    f"{MAX_UPLOAD_SIZE_MB} MB."
-                                ),
-                            )
-
-                        output.write(chunk)
-
-            local_archive_path = str(destination.resolve())
-
-        except HTTPException:
-            raise
-
-        except requests.RequestException as exc:
-            raise HTTPException(
-                status_code=502,
-                detail=f"CDSE download request failed: {exc}",
-            )
-
-        # --------------------------------------------------------
-        # CRITICAL: extract the real SAFE/raster assets.
-        # --------------------------------------------------------
-        try:
-            ingestor = RasterIngestor(CDSE_PRODUCT_DIR)
-
-            ingestion_manifest = ingestor.ingest_archive(
-                local_archive_path,
-                product_id=str(product.get("Id") or req.product_id),
-                collection=(
-                    (product.get("Collection") or {}).get("Name")
-                    if isinstance(product.get("Collection"), dict)
-                    else None
-                ),
-                create_analysis_stack=True,
-            )
-
-        except FileNotFoundError as exc:
-            raise HTTPException(
-                status_code=500,
-                detail=f"Downloaded CDSE archive could not be ingested: {exc}",
-            )
-
-        except ValueError as exc:
-            raise HTTPException(
-                status_code=422,
-                detail=f"CDSE raster ingestion failed validation: {exc}",
-            )
-
-        except RuntimeError as exc:
-            raise HTTPException(
-                status_code=503,
-                detail=(
-                    "CDSE product was downloaded, but the raster-processing "
-                    f"environment is not ready: {exc}"
-                ),
-            )
-
-        except Exception as exc:
-            raise HTTPException(
-                status_code=500,
-                detail=f"Unexpected CDSE raster ingestion error: {exc}",
-            )
-
-    observation = product_to_observation(
-        product=product,
-        modality=modality,
-        quicklook_url=quicklook_url,
-        local_product_path=local_archive_path,
-        ingestion_manifest=ingestion_manifest,
-    )
-
-    if req.download_product:
-        model_path = observation.get("file_path")
-
-        if not model_path or not os.path.isfile(model_path):
-            raise HTTPException(
-                status_code=500,
-                detail=(
-                    "CDSE product downloaded, but no model-ready raster "
-                    "asset was produced by the ingestion pipeline."
-                ),
-            )
-
-        message = "CDSE product downloaded and converted to analysis-ready raster assets."
-
-    else:
-        message = "CDSE product selected successfully; no raster was downloaded."
-
-    return {
-        "status": "success",
-        "message": message,
-        "observation": observation,
-        "downloaded": bool(local_archive_path),
-        "ingested": bool(ingestion_manifest),
-        "ingestion": ingestion_manifest,
-    }
 
 
 # ============================================================
@@ -1150,6 +472,206 @@ def get_demo_by_id(demo_id: str):
         status_code=404,
         detail="Demo scenario not found",
     )
+
+
+# ============================================================
+# SIH DATA RESOURCES (SIH26167)
+# ============================================================
+
+@app.get("/api/resources/sih")
+def get_sih_resources(resource_type: Optional[str] = None, available_only: bool = False):
+    """
+    List all standardized SIH26167 benchmark and training datasets.
+    """
+    return {
+        "resources": sih_resource_registry.list_resources(
+            resource_type=resource_type,
+            available_only=available_only,
+        ),
+        "summary": sih_resource_registry.get_summary(),
+    }
+
+
+@app.get("/api/resources/sih/{resource_id}/samples")
+def get_sih_resource_samples(
+    resource_id: str,
+    limit: Optional[int] = 50,
+    filter_task: Optional[str] = None,
+):
+    """
+    Browse samples for an authentic SIH dataset/benchmark.
+    """
+    res = sih_resource_registry.get_resource(resource_id)
+    if not res:
+        raise HTTPException(
+            status_code=404,
+            detail=f"SIH data resource '{resource_id}' not found.",
+        )
+
+    return {
+        "resource": res.get_metadata(),
+        "samples": res.list_samples(limit=limit, filter_task=filter_task),
+    }
+
+
+@app.post("/api/resources/sih/load")
+def load_sih_sample(req: SIHLoadRequest):
+    """
+    Materialize an authentic SIH dataset/benchmark sample into the SatQuery observation workspace.
+    """
+    res = sih_resource_registry.get_resource(req.resource_id)
+    if not res:
+        raise HTTPException(
+            status_code=404,
+            detail=f"SIH data resource '{req.resource_id}' not found.",
+        )
+
+    try:
+        obs_data = res.materialize_observation(
+            req.sample_id,
+            output_dir=str(UPLOAD_DIR),
+            pair_mode=req.pair_mode,
+        )
+        return {
+            "status": "success",
+            "resource_id": req.resource_id,
+            "sample_id": req.sample_id,
+            "data": obs_data,
+        }
+    except ResourceNotConfiguredError as err:
+        raise HTTPException(status_code=412, detail=str(err))
+    except SampleNotFoundError as err:
+        raise HTTPException(status_code=404, detail=str(err))
+    except InvalidSampleFileError as err:
+        raise HTTPException(status_code=422, detail=str(err))
+    except FileNotFoundError as err:
+        raise HTTPException(status_code=404, detail=str(err))
+    except SIHResourceError as err:
+        raise HTTPException(status_code=400, detail=str(err))
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Could not load SIH sample: {exc}",
+        )
+
+
+# ============================================================
+# WEB SATELLITE DATA FETCHING (BHOONIDHI & PROVIDERS)
+# ============================================================
+
+@app.get("/api/data/providers")
+def get_satellite_providers():
+    """
+    List available satellite data providers and their supported mission collections.
+    """
+    return {
+        "providers": list_providers()
+    }
+
+
+@app.post("/api/data/search")
+def search_satellite_data(req: DataSearchRequest):
+    """
+    Search external satellite catalogue (e.g. ISRO Bhoonidhi) for real observations.
+    """
+    try:
+        prov = get_provider(req.provider)
+        bbox_tuple = tuple(req.bbox) if req.bbox and len(req.bbox) == 4 else None
+        search_req = SearchRequest(
+            provider=req.provider,
+            collections=req.collections,
+            bbox=bbox_tuple,
+            datetime_range=req.datetime_range,
+            limit=req.limit,
+            filters=req.filters,
+        )
+        resp = prov.search(search_req)
+        return resp.to_dict()
+    except InvalidSearchRequestError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except ProviderAuthError as e:
+        raise HTTPException(status_code=401, detail=str(e))
+    except ProviderRateLimitError as e:
+        raise HTTPException(status_code=429, detail=str(e))
+    except ProviderNetworkError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Satellite search failed: {e}")
+
+
+@app.post("/api/data/download")
+def download_satellite_product(req: DataDownloadRequest):
+    """
+    Download a selected satellite product and run through common ingestion.
+    """
+    try:
+        prov = get_provider(req.provider)
+        download_dir = UPLOAD_DIR / "bhoonidhi_downloads"
+        download_dir.mkdir(parents=True, exist_ok=True)
+        dl_result = prov.download(
+            product_id=req.product_id,
+            destination_dir=download_dir,
+            collection=req.collection,
+            force_redownload=req.force_redownload,
+        )
+
+        file_path = Path(dl_result.local_path)
+        clean_name = file_path.name
+
+        if file_path.suffix.lower() == ".zip":
+            manifest = RasterIngestor(download_dir).ingest_archive(
+                file_path,
+                product_id=req.product_id,
+                collection=req.collection,
+            )
+            analysis_asset = manifest.get("analysis_stack") or manifest.get("primary_raster") or manifest.get("display_raster")
+            metadata = MetadataExtractor.extract_metadata(str(analysis_asset), clean_name)
+            metadata["archive_manifest"] = manifest
+        else:
+            metadata = MetadataExtractor.extract_metadata(str(file_path), clean_name)
+
+        metadata["id"] = f"fetch_{uuid.uuid4().hex}"
+        metadata["provider"] = req.provider
+        metadata["product_id"] = req.product_id
+        metadata["collection"] = req.collection or metadata.get("platform")
+        metadata["source_type"] = "web_fetch"
+        metadata["file_path"] = str(file_path)
+        metadata["local_path"] = str(file_path)
+        metadata["cached"] = dl_result.cached
+        metadata["download_timestamp"] = dl_result.download_timestamp
+
+        public_url = ImageResolver.ensure_displayable_preview(str(file_path))
+        metadata["url"] = public_url
+        metadata["image_url"] = public_url
+        metadata["imageUrl"] = public_url
+        metadata["thumbnailUrl"] = public_url
+        metadata["thumbnail_url"] = public_url
+
+        return {
+            "status": "success",
+            "download_result": {
+                "provider": dl_result.provider,
+                "product_id": dl_result.product_id,
+                "collection": dl_result.collection,
+                "local_path": dl_result.local_path,
+                "file_size_bytes": dl_result.file_size_bytes,
+                "cached": dl_result.cached,
+                "download_timestamp": dl_result.download_timestamp,
+            },
+            "observation": metadata,
+        }
+    except ProductNotAvailableError as e:
+        raise HTTPException(status_code=412, detail=str(e))
+    except ProductNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except ProviderAuthError as e:
+        raise HTTPException(status_code=401, detail=str(e))
+    except ProviderRateLimitError as e:
+        raise HTTPException(status_code=429, detail=str(e))
+    except ProviderNetworkError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Product download failed: {e}")
 
 
 # ============================================================
@@ -1274,9 +796,7 @@ async def upload_image(
             ),
         )
 
-    public_url = (
-        f"/static/uploads/{destination.name}"
-    )
+    public_url = ImageResolver.ensure_displayable_preview(str(destination.resolve()))
 
     # --------------------------------------------------------
     # IMPORTANT MODEL INPUT CONTRACT
@@ -1290,6 +810,8 @@ async def upload_image(
     metadata["url"] = public_url
     metadata["image_url"] = public_url
     metadata["imageUrl"] = public_url
+    metadata["thumbnailUrl"] = public_url
+    metadata["thumbnail_url"] = public_url
 
     metadata["file_path"] = str(
         destination.resolve()
@@ -1451,6 +973,121 @@ def analyze(req: AnalyzeRequest):
         del ANALYSIS_HISTORY[100:]
 
     return result
+
+
+# ============================================================
+# SATELLITE DATA PROVIDERS (WEB FETCH)
+# ============================================================
+
+@app.get("/api/data/providers")
+def get_satellite_providers():
+    """List registered satellite data providers."""
+    return {"providers": list_providers()}
+
+
+@app.post("/api/data/search")
+def search_satellite_data(req: DataSearchRequest):
+    """
+    Search satellite data from configured provider (e.g. ISRO Bhoonidhi).
+    """
+    try:
+        provider = get_provider(req.provider)
+        search_req = SearchRequest(
+            provider=req.provider,
+            collections=req.collections,
+            bbox=tuple(req.bbox) if req.bbox and len(req.bbox) == 4 else None,
+            datetime_range=req.datetime_range,
+            limit=req.limit,
+            filters=req.filters,
+        )
+        response = provider.search(search_req)
+        return response.to_dict()
+    except InvalidSearchRequestError as err:
+        raise HTTPException(status_code=400, detail=str(err))
+    except ProviderAuthError as err:
+        raise HTTPException(status_code=401, detail=str(err))
+    except ProviderRateLimitError as err:
+        raise HTTPException(status_code=429, detail=str(err))
+    except ProviderNetworkError as err:
+        raise HTTPException(status_code=502, detail=str(err))
+    except ProviderError as err:
+        raise HTTPException(status_code=400, detail=str(err))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Search failed: {exc}")
+
+
+@app.post("/api/data/download")
+async def download_satellite_data(req: DataDownloadRequest):
+    """
+    Download satellite observation package from provider and ingest into workspace.
+    """
+    try:
+        provider = get_provider(req.provider)
+        download_dir = UPLOAD_DIR / "bhoonidhi"
+        download_dir.mkdir(parents=True, exist_ok=True)
+
+        res = provider.download(
+            product_id=req.product_id,
+            destination_dir=download_dir,
+            collection=req.collection,
+            force_redownload=req.force_redownload,
+        )
+
+        local_path = Path(res.local_path)
+
+        # Ingest archive or single raster
+        if local_path.suffix.lower() in {".zip", ".tar", ".gz"}:
+            ingestor = RasterIngestor(download_dir)
+            ingest_result = ingestor.ingest_archive(str(local_path))
+            raster_file = ingest_result.get("raster_path", str(local_path))
+            metadata = ingest_result.get("metadata", {})
+        else:
+            raster_file = str(local_path)
+            metadata = MetadataExtractor.extract_metadata(
+                raster_file,
+                local_path.name,
+            )
+
+        raster_name = Path(raster_file).name
+        public_url = f"/static/uploads/bhoonidhi/{raster_name}"
+
+        # Standard observation contract
+        metadata["id"] = f"bhoonidhi_{uuid.uuid4().hex[:8]}"
+        metadata["name"] = raster_name
+        metadata["filename"] = raster_name
+        metadata["url"] = public_url
+        metadata["image_url"] = public_url
+        metadata["imageUrl"] = public_url
+        metadata["file_path"] = str(raster_file)
+        metadata["local_path"] = str(raster_file)
+        metadata["source_type"] = "web_fetch"
+        metadata["provider"] = req.provider
+        metadata["product_id"] = req.product_id
+        if req.collection:
+            metadata["collection"] = req.collection
+
+        return {
+            "status": "success",
+            "observation": metadata,
+            "download": res.to_dict(),
+        }
+
+    except InvalidSearchRequestError as err:
+        raise HTTPException(status_code=400, detail=str(err))
+    except ProviderAuthError as err:
+        raise HTTPException(status_code=401, detail=str(err))
+    except ProductNotFoundError as err:
+        raise HTTPException(status_code=404, detail=str(err))
+    except ProductNotAvailableError as err:
+        raise HTTPException(status_code=422, detail=str(err))
+    except ProviderRateLimitError as err:
+        raise HTTPException(status_code=429, detail=str(err))
+    except ProviderNetworkError as err:
+        raise HTTPException(status_code=502, detail=str(err))
+    except ProviderError as err:
+        raise HTTPException(status_code=400, detail=str(err))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Download and ingestion failed: {exc}")
 
 
 # ============================================================

@@ -25,9 +25,23 @@ env/
 .DS_Store
 Thumbs.db
 
-# Ingested upload rasters
+# Ingested upload rasters & test artifacts
 app/static/uploads/*.tif
 app/static/uploads/*.png
 app/static/uploads/*.jpg
 app/static/uploads/*.geotiff
 app/static/uploads/cdse_products/
+app/static/uploads/test_*/
+app/static/uploads/real_validation/
+app/static/uploads/sih_materialized/
+
+# Model Checkpoints & Large Weights (exceeds GitHub 100MB limit)
+*.safetensors
+*.pt
+*.bin
+*.pth
+*.ckpt
+*.onnx
+checkpoints/**/model.safetensors
+checkpoints/**/optimizer.pt
+

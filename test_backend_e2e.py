@@ -4,16 +4,16 @@ import logging
 
 logging.basicConfig(level=logging.INFO)
 
+from PIL import Image
 from app.agent.orchestrator import agent_orchestrator
-from app.utils.image_resolver import ImageResolver
 
 def test_e2e_backend():
     print("==================================================")
     print("Running SatQuery Backend End-to-End Test Pipeline")
     print("==================================================")
 
-    # 1. Generate test image
-    test_img = ImageResolver._generate_synthetic_satellite_image(512, 512)
+    # 1. Create standard test image
+    test_img = Image.new("RGB", (512, 512), color=(120, 160, 90))
     img_path = os.path.join("app", "static", "uploads", "e2e_test_sample.png")
     os.makedirs(os.path.dirname(img_path), exist_ok=True)
     test_img.save(img_path)
@@ -43,7 +43,8 @@ def test_e2e_backend():
         print(f"Confidence: {res.get('confidence')}")
         print(f"Answer: {res.get('answer')[:120]}...")
         if res.get("visual_evidence"):
-            print(f"Visual Evidence: {list(res.get('visual_evidence').keys())}")
+            ve = res.get("visual_evidence")
+            print(f"Visual Evidence: {list(ve.keys()) if isinstance(ve, dict) else len(ve)}")
         if res.get("audit"):
             print(f"Execution Time: {res.get('audit', {}).get('inference_time_ms')}ms")
 

@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SatQuery AI — SIH 2026 Slide 6: Research & References</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+    body {
+      background: #0f172a;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 24px;
+    }
+    .slide-container {
+      width: 1200px;
+      height: 675px; /* Exact 16:9 ratio */
+      background: #ffffff;
+      border-radius: 8px;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    /* Top Header */
+    .slide-header {
+      padding: 24px 36px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .team-badge {
+      border: 2.5px solid #6b21a8;
+      border-radius: 50%;
+      width: 140px;
+      height: 70px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      line-height: 1.2;
+      color: #1e293b;
+      font-weight: 700;
+      font-size: 15px;
+      background: #faf5ff;
+    }
+    .idea-title {
+      font-size: 26px;
+      font-weight: 900;
+      letter-spacing: 0.5px;
+      color: #0f172a;
+      text-align: center;
+      text-transform: uppercase;
+      font-family: Georgia, serif;
+    }
+    .sih-logo-area {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .brain-icon {
+      width: 44px;
+      height: 52px;
+    }
+    .sih-text {
+      text-align: left;
+      line-height: 1.15;
+    }
+    .sih-text .title {
+      font-size: 14px;
+      font-weight: 800;
+      color: #334155;
+      letter-spacing: 0.5px;
+    }
+    .sih-text .year {
+      font-size: 19px;
+      font-weight: 900;
+      color: #0284c7;
+    }
+
+    /* Content Cards Grid */
+    .content-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      padding: 10px 36px 0;
+      flex: 1;
+    }
+    .content-card {
+      background: #f8fafc;
+      border: 1.5px solid #e2e8f0;
+      border-radius: 10px;
+      padding: 20px 20px;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+    }
+    .card-header {
+      font-size: 17px;
+      font-weight: 800;
+      color: #0f172a;
+      margin-bottom: 14px;
+      padding-bottom: 10px;
+      border-bottom: 2px solid #0284c7;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .card-header svg {
+      width: 20px;
+      height: 20px;
+      color: #0284c7;
+    }
+    .bullet-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      font-size: 13px;
+      line-height: 1.45;
+      color: #334155;
+    }
+    .bullet-item {
+      position: relative;
+      padding-left: 18px;
+    }
+    .bullet-item::before {
+      content: "•";
+      position: absolute;
+      left: 0;
+      top: -2px;
+      color: #0284c7;
+      font-size: 18px;
+      font-weight: bold;
+    }
+    .lead-text {
+      font-weight: 700;
+      color: #0f172a;
+    }
+    .ref-link {
+      color: #0284c7;
+      font-weight: 600;
+      text-decoration: underline;
+    }
+
+    /* Footer */
+    .slide-footer {
+      background: #0284c7;
+      color: #ffffff;
+      padding: 10px 36px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 13px;
+      font-weight: 600;
+      margin-top: auto;
+    }
+    .footer-page {
+      font-size: 16px;
+      font-weight: 800;
+    }
+
+    /* Action bar */
+    .action-bar {
+      margin-top: 16px;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+    .btn {
+      background: #0284c7;
+      color: white;
+      text-decoration: none;
+      padding: 7px 12px;
+      border-radius: 6px;
+      font-weight: 600;
+      font-size: 12.5px;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      transition: background 0.2s;
+    }
+    .btn:hover {
+      background: #0369a1;
+    }
+    .btn-secondary {
+      background: #334155;
+    }
+    .btn-secondary:hover {
+      background: #1e293b;
+    }
+    .badge {
+      background: #22c55e;
+      color: white;
+      padding: 5px 10px;
+      border-radius: 20px;
+      font-size: 11.5px;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="slide-container" id="sih-slide-6">
+    <!-- Top Bar -->
+    <div class="slide-header">
+      <div class="team-badge">
+        <span>Your Team</span>
+        <span>Name</span>
+      </div>
+
+      <div class="idea-title">
+        RESEARCH & REFERENCES
+      </div>
+
+      <div class="sih-logo-area">
+        <svg class="brain-icon" viewBox="0 0 100 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M48 10C35 10 20 22 20 38C15 42 12 48 12 56C12 65 18 72 20 78C16 84 18 94 25 100C32 106 42 108 48 108V10Z" fill="#F97316"/>
+          <path d="M52 10C65 10 80 22 80 38C85 42 88 48 88 56C88 65 82 72 80 78C84 84 82 94 75 100C68 106 58 108 52 108V10Z" fill="#10B981"/>
+          <line x1="58" y1="30" x2="72" y2="30" stroke="#ffffff" stroke-width="3"/>
+          <circle cx="74" cy="30" r="3" fill="#ffffff"/>
+          <line x1="62" y1="50" x2="78" y2="50" stroke="#ffffff" stroke-width="3"/>
+          <circle cx="80" cy="50" r="3" fill="#ffffff"/>
+          <line x1="58" y1="70" x2="70" y2="70" stroke="#ffffff" stroke-width="3"/>
+          <circle cx="72" cy="70" r="3" fill="#ffffff"/>
+          <line x1="62" y1="90" x2="74" y2="90" stroke="#ffffff" stroke-width="3"/>
+          <circle cx="76" cy="90" r="3" fill="#ffffff"/>
+        </svg>
+        <div class="sih-text">
+          <div class="title">SMART INDIA</div>
+          <div class="title">HACKATHON</div>
+          <div class="year">2026</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2 Cards -->
+    <div class="content-grid">
+      <!-- Card 1: Prescribed Datasets & Benchmarks -->
+      <div class="content-card">
+        <div class="card-header">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
+          Prescribed Datasets & Benchmarks
+        </div>
+        <ul class="bullet-list">
+          <li class="bullet-item">
+            <span class="lead-text">1. BigEarthNet.txt (Primary Adaptation):</span> <a class="ref-link" href="https://arxiv.org/abs/2603.29630" target="_blank">arXiv:2603.29630</a>. Multimodal remote sensing dataset used for PEFT/LoRA adaptation of our core RemoteSensingVQAModel checkpoint.
+          </li>
+          <li class="bullet-item">
+            <span class="lead-text">2. RSVQA Benchmark (IEEE TGRS):</span> Lobry et al. "RSVQA: Visual Question Answering for Remote Sensing Data". Prescribed benchmark for quantitative single-image VQA evaluation.
+          </li>
+          <li class="bullet-item">
+            <span class="lead-text">3. VRSBench Benchmark:</span> Visual remote sensing benchmark for text-guided region localization, open-vocabulary grounding, and scene description.
+          </li>
+          <li class="bullet-item">
+            <span class="lead-text">4. CDVQA Benchmark:</span> Change Detection Visual Question Answering benchmark evaluating natural-language bi-temporal change understanding.
+          </li>
+        </ul>
+      </div>
+
+      <!-- Card 2: Sensor Specifications & Standards -->
+      <div class="content-card">
+        <div class="card-header">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+          Sensor Specifications & Geospatial Standards
+        </div>
+        <ul class="bullet-list">
+          <li class="bullet-item">
+            <span class="lead-text">5. ISRO / SAC Mission Manuals:</span> Cartosat-2S/3 Optical Product Manual & RISAT-1 / EOS-04 SAR Data User Handbook. Standardizes sigma-nought (σ⁰ dB) calibration and band ingestion.
+          </li>
+          <li class="bullet-item">
+            <span class="lead-text">6. OGC Geospatial Standards:</span> Complies with Open Geospatial Consortium GeoTIFF, EPSG coordinate reference systems, and WGS84 bounding envelopes for universal GIS interoperability.
+          </li>
+          <li class="bullet-item">
+            <span class="lead-text">7. Core Geospatial Frameworks:</span> Built on Rasterio & GDAL C-bindings for affine matrix transformations, and MapLibre GL for GPU-accelerated WebGL vector rendering.
+          </li>
+          <li class="bullet-item">
+            <span class="lead-text">8. Full Code Traceability:</span> All implementation components and adapters mapped in our GitHub repository: <span class="ref-link">github.com/akashsengupta/satquery-ai</span>.
+          </li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Bottom Footer -->
+    <div class="slide-footer">
+      <div>@SIH Idea submission- Template</div>
+      <div class="footer-page">6</div>
+    </div>
+  </div>
+
+  <div class="action-bar">
+    <a class="btn btn-secondary" href="/static/sih_presentation.html">Slide 2</a>
+    <a class="btn btn-secondary" href="/static/sih_presentation_slide3.html">Slide 3</a>
+    <a class="btn btn-secondary" href="/static/sih_presentation_slide4.html">Slide 4</a>
+    <a class="btn btn-secondary" href="/static/sih_presentation_slide5.html">Slide 5</a>
+    <a class="btn" href="/static/sih_presentation_slide6.html">Slide 6 (Research & References)</a>
+    <span class="badge">SIH26167 COMPLETE</span>
+  </div>
+
+</body>
+</html>

@@ -100,20 +100,7 @@ type BackendAnalysisResponse = {
 };
 
 
-type BackendSearchResponse = {
-  status: string;
-  provider: string;
-  count: number;
-  products: any[];
-};
 
-
-type BackendIngestResponse = {
-  status: string;
-  message?: string;
-  observation: any;
-  downloaded?: boolean;
-};
 
 
 type ServiceStepCallback = (
@@ -128,7 +115,7 @@ type ServiceStepCallback = (
 
 // Keep the live workspace empty. Demo observations are loaded only when
 // the user explicitly selects a demo scenario. This prevents demo/change
-// observations from appearing in a real CDSE analysis session.
+// observations from appearing in a real satellite analysis session.
 let userObservations: Observation[] = [];
 
 
@@ -354,6 +341,29 @@ function extractObservationSensor(
     candidate.metadata?.sensor ||
     undefined
   );
+}
+
+
+function formatBandsString(rawBands: any, fallbackModality?: string): string {
+  if (typeof rawBands === 'string' && rawBands.trim().length > 0) {
+    return rawBands;
+  }
+  if (typeof rawBands === 'number') {
+    return `${rawBands} Channels`;
+  }
+  if (Array.isArray(rawBands)) {
+    if (rawBands.length === 0) return `${fallbackModality || 'MULTI-SPECTRAL'} RASTER`;
+    if (typeof rawBands[0] === 'object' && rawBands[0] !== null) {
+      const descriptions = rawBands
+        .map((b: any) => b.description || b.name || (b.index ? `B${b.index}` : ''))
+        .filter(Boolean);
+      return descriptions.length > 0
+        ? `${rawBands.length} Channels (${descriptions.join(', ')})`
+        : `${rawBands.length} Channels`;
+    }
+    return `${rawBands.length} Channels (${rawBands.join(', ')})`;
+  }
+  return `${fallbackModality || 'MULTI-SPECTRAL'} RASTER`;
 }
 
 
@@ -1112,13 +1122,6 @@ export const satQueryService = {
         ) / 2
         : undefined;
 
-    const bands =
-      Array.isArray(
-        realMeta.bands
-      )
-        ? realMeta.bands
-        : [];
-
     const acquisitionDate =
       realMeta.acquisition_date ||
       null;
@@ -1182,10 +1185,7 @@ export const satQueryService = {
             )
           ),
 
-        bands:
-          bands.length > 0
-            ? `${bands.length} Channels (${bands.join(', ')})`
-            : 'Band information unavailable',
+        bands: formatBandsString(realMeta.bands, modality),
 
         fileSize:
           `${(
@@ -1290,7 +1290,316 @@ export const satQueryService = {
 
 
   // ==========================================================
-  // GET OBSERVATIONS
+  // WEB SATELLITE DATA SEARCH & FETCH (BHOONIDHI)
+  // ==========================================================
+
+  async getSatelliteProviders(): Promise<any[]> {
+    try {
+      const data = await fetchJson<{ providers?: any[] }>('/api/data/providers');
+      return Array.isArray(data.providers) ? data.providers : [];
+    } catch (err) {
+      console.warn('Failed to load satellite providers:', err);
+      return [];
+    }
+  },
+
+  async searchSatelliteData(params: {
+    provider?: string;
+    collections?: string[];
+    bbox?: [number, number, number, number];
+    datetimeRange?: string;
+    limit?: number;
+    filters?: Record<string, any>;
+  }): Promise<{ provider: string; total_matched: number; items: any[] }> {
+    const payload = {
+      provider: params.provider || 'bhoonidhi',
+      collections: params.collections || [],
+      bbox: params.bbox,
+      datetime_range: params.datetimeRange,
+      limit: params.limit || 10,
+      filters: params.filters || {},
+    };
+
+    const resp = await fetchJson<{
+      provider: string;
+      total_matched: number;
+      items: any[];
+    }>('/api/data/search', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
+    return resp;
+  },
+
+  async downloadSatelliteProduct(params: {
+    productId: string;
+    provider?: string;
+    collection?: string;
+  }): Promise<Observation> {
+    const payload = {
+      provider: params.provider || 'bhoonidhi',
+      product_id: params.productId,
+      collection: params.collection,
+    };
+
+    const resp = await fetchJson<{
+      status: string;
+      observation: BackendUploadMetadata;
+    }>('/api/data/download', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const realMeta = resp.observation;
+    const acquisitionDate =
+      typeof realMeta.acquisition_date === 'string' && realMeta.acquisition_date.trim()
+        ? realMeta.acquisition_date.trim()
+        : null;
+
+    const newObs: Observation = {
+      id: realMeta.id || `obs-bhoonidhi-${Date.now()}`,
+      name: realMeta.filename || realMeta.name || params.productId,
+      filename: realMeta.filename || realMeta.name || params.productId,
+      date: acquisitionDate ? acquisitionDate.substring(0, 10) : 'Recent Pass',
+      satellite: String(realMeta.platform || realMeta.sensor || params.collection || 'ISRO Bhoonidhi'),
+      modality: (String(realMeta.modality || '').toUpperCase() === 'SAR' ? 'SAR' : 'OPTICAL') as ModalityType,
+      resolution: typeof realMeta.resolution === 'number' ? `${realMeta.resolution}m` : '5.8m',
+      bands: Array.isArray(realMeta.bands) ? realMeta.bands.length : 3,
+      imageUrl: realMeta.url || realMeta.image_url || '/static/assets/optical_2024.png',
+      thumbnailUrl: realMeta.url || realMeta.image_url || '/static/assets/optical_2024.png',
+      status: 'AVAILABLE',
+      isDemo: false,
+      metadata: {
+        ...realMeta,
+        bands: formatBandsString(realMeta.bands, realMeta.modality || 'OPTICAL'),
+        provider: 'bhoonidhi',
+        productId: params.productId,
+        collection: params.collection,
+        sourceType: 'web_fetch',
+        ingestionStatus: 'ready',
+      },
+      ...(({
+        filePath: realMeta.file_path,
+        file_path: realMeta.file_path,
+        localPath: realMeta.local_path || realMeta.file_path,
+        local_path: realMeta.local_path || realMeta.file_path,
+        sourceType: 'web_fetch',
+        source_type: 'web_fetch',
+        ingestionStatus: 'ready',
+        ingestion_status: 'ready',
+        acquisitionDate: acquisitionDate,
+        acquisition_date: acquisitionDate,
+        provider: 'bhoonidhi',
+        productId: params.productId,
+        product_id: params.productId,
+      } as any)),
+    } as Observation;
+
+    userObservations.unshift(newObs);
+    return newObs;
+  },
+
+
+  // ==========================================================
+  // SIH DATA RESOURCES (SIH26167)
+  // ==========================================================
+
+  async getSIHResources(params?: {
+    resourceType?: string;
+    availableOnly?: boolean;
+  }): Promise<{
+    resources: import('../types/satquery').SIHResourceItem[];
+    summary: { total_registered: number; available_count: number };
+  }> {
+    const queryParams = new URLSearchParams();
+    if (params?.resourceType) queryParams.set('resource_type', params.resourceType);
+    if (params?.availableOnly) queryParams.set('available_only', 'true');
+
+    const url = `/api/resources/sih${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
+    return await fetchJson<{
+      resources: import('../types/satquery').SIHResourceItem[];
+      summary: { total_registered: number; available_count: number };
+    }>(url);
+  },
+
+  async getSIHResourceSamples(
+    resourceId: string,
+    limit: number = 50,
+    filterTask?: string
+  ): Promise<{
+    resource: import('../types/satquery').SIHResourceItem;
+    samples: import('../types/satquery').SIHSampleItem[];
+  }> {
+    const queryParams = new URLSearchParams();
+    if (limit) queryParams.set('limit', limit.toString());
+    if (filterTask) queryParams.set('filter_task', filterTask);
+
+    const url = `/api/resources/sih/${encodeURIComponent(resourceId)}/samples?${queryParams.toString()}`;
+    return await fetchJson<{
+      resource: import('../types/satquery').SIHResourceItem;
+      samples: import('../types/satquery').SIHSampleItem[];
+    }>(url);
+  },
+
+  async loadSIHSample(
+    resourceId: string,
+    sampleId: string
+  ): Promise<{
+    observation: Observation;
+    companionObservation?: Observation;
+    suggestedQuery?: string;
+    groundTruthAnswer?: string;
+  }> {
+    const resp = await fetchJson<{
+      status: string;
+      resource_id: string;
+      sample_id: string;
+      data: any;
+    }>('/api/resources/sih/load', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        resource_id: resourceId,
+        sample_id: sampleId,
+      }),
+    });
+
+    const data = resp.data;
+
+    // Check if bi-temporal pair (CDVQA)
+    if (data.primary_observation && data.companion_observation) {
+      const pObs = data.primary_observation;
+      const cObs = data.companion_observation;
+
+      const primary: Observation = {
+        id: pObs.id || `sih_${resourceId}_${sampleId}_t1`,
+        name: pObs.name || pObs.filename || `${sampleId} (T1)`,
+        filename: pObs.filename || `${sampleId}_t1.tif`,
+        date: pObs.acquisition_date ? String(pObs.acquisition_date).substring(0, 10) : 'Pre-change Pass',
+        satellite: pObs.platform || pObs.sensor || 'Benchmark Reference T1',
+        modality: (String(pObs.modality || '').toUpperCase() === 'SAR' ? 'SAR' : 'OPTICAL') as ModalityType,
+        resolution: pObs.resolution ? `${pObs.resolution}m` : '10m',
+        bands: Array.isArray(pObs.bands) ? pObs.bands.length : 3,
+        imageUrl: pObs.url || pObs.image_url || pObs.imageUrl,
+        thumbnailUrl: pObs.url || pObs.image_url || pObs.imageUrl,
+        status: 'AVAILABLE',
+        isDemo: false,
+        metadata: {
+          ...pObs,
+          bands: formatBandsString(pObs.bands, pObs.modality || 'OPTICAL'),
+          sourceType: 'sih_resource',
+          resourceId: resourceId,
+          sampleId: sampleId,
+          ingestionStatus: 'ready',
+        },
+        ...(({
+          filePath: pObs.file_path,
+          file_path: pObs.file_path,
+          localPath: pObs.local_path || pObs.file_path,
+          local_path: pObs.local_path || pObs.file_path,
+          sourceType: 'sih_resource',
+          source_type: 'sih_resource',
+          ingestionStatus: 'ready',
+          ingestion_status: 'ready',
+        } as any)),
+      } as Observation;
+
+      const companion: Observation = {
+        id: cObs.id || `sih_${resourceId}_${sampleId}_t2`,
+        name: cObs.name || cObs.filename || `${sampleId} (T2)`,
+        filename: cObs.filename || `${sampleId}_t2.tif`,
+        date: cObs.acquisition_date ? String(cObs.acquisition_date).substring(0, 10) : 'Post-change Pass',
+        satellite: cObs.platform || cObs.sensor || 'Benchmark Reference T2',
+        modality: (String(cObs.modality || '').toUpperCase() === 'SAR' ? 'SAR' : 'OPTICAL') as ModalityType,
+        resolution: cObs.resolution ? `${cObs.resolution}m` : '10m',
+        bands: Array.isArray(cObs.bands) ? cObs.bands.length : 3,
+        imageUrl: cObs.url || cObs.image_url || cObs.imageUrl,
+        thumbnailUrl: cObs.url || cObs.image_url || cObs.imageUrl,
+        status: 'AVAILABLE',
+        isDemo: false,
+        metadata: {
+          ...cObs,
+          bands: formatBandsString(cObs.bands, cObs.modality || 'OPTICAL'),
+          sourceType: 'sih_resource',
+          resourceId: resourceId,
+          sampleId: sampleId,
+          ingestionStatus: 'ready',
+        },
+        ...(({
+          filePath: cObs.file_path,
+          file_path: cObs.file_path,
+          localPath: cObs.local_path || cObs.file_path,
+          local_path: cObs.local_path || cObs.file_path,
+          sourceType: 'sih_resource',
+          source_type: 'sih_resource',
+          ingestionStatus: 'ready',
+          ingestion_status: 'ready',
+        } as any)),
+      } as Observation;
+
+      userObservations.unshift(companion);
+      userObservations.unshift(primary);
+
+      return {
+        observation: primary,
+        companionObservation: companion,
+        suggestedQuery: data.suggested_query,
+        groundTruthAnswer: data.ground_truth_answer,
+      };
+    }
+
+    // Single observation
+    const realMeta = data;
+    const obs: Observation = {
+      id: realMeta.id || `sih_${resourceId}_${sampleId}`,
+      name: realMeta.name || realMeta.filename || sampleId,
+      filename: realMeta.filename || sampleId,
+      date: realMeta.acquisition_date ? String(realMeta.acquisition_date).substring(0, 10) : 'Benchmark Reference',
+      satellite: realMeta.platform || realMeta.sensor || realMeta.dataset_name || 'SIH Benchmark',
+      modality: (String(realMeta.modality || '').toUpperCase() === 'SAR' ? 'SAR' : 'OPTICAL') as ModalityType,
+      resolution: typeof realMeta.resolution === 'number' ? `${realMeta.resolution}m` : '10m',
+      bands: Array.isArray(realMeta.bands) ? realMeta.bands.length : 3,
+      imageUrl: realMeta.url || realMeta.image_url || realMeta.imageUrl,
+      thumbnailUrl: realMeta.url || realMeta.image_url || realMeta.imageUrl,
+      status: 'AVAILABLE',
+      isDemo: false,
+      metadata: {
+        ...realMeta,
+        bands: formatBandsString(realMeta.bands, realMeta.modality || 'OPTICAL'),
+        sourceType: 'sih_resource',
+        resourceId: resourceId,
+        sampleId: sampleId,
+        ingestionStatus: 'ready',
+      },
+      ...(({
+        filePath: realMeta.file_path,
+        file_path: realMeta.file_path,
+        localPath: realMeta.local_path || realMeta.file_path,
+        local_path: realMeta.local_path || realMeta.file_path,
+        sourceType: 'sih_resource',
+        source_type: 'sih_resource',
+        ingestionStatus: 'ready',
+        ingestion_status: 'ready',
+      } as any)),
+    } as Observation;
+
+    userObservations.unshift(obs);
+
+    return {
+      observation: obs,
+      suggestedQuery: realMeta.suggested_query,
+      groundTruthAnswer: realMeta.ground_truth_answer,
+    };
+  },
   // ==========================================================
 
   async getObservations():
@@ -1561,232 +1870,6 @@ export const satQueryService = {
   },
 
 
-  // ==========================================================
-  // SEARCH SATELLITE CATALOGUE
-  // ==========================================================
-
-  async searchSatelliteCatalogue(
-    params: {
-      provider?: string;
-
-      bbox: number[];
-
-      start_date: string;
-      end_date: string;
-
-      collection?: string;
-
-      max_cloud_cover?: number;
-
-      limit?: number;
-    }
-  ): Promise<BackendSearchResponse> {
-
-    if (
-      !Array.isArray(
-        params.bbox
-      ) ||
-      params.bbox.length !== 4
-    ) {
-      throw new Error(
-        'A valid bounding box is required for satellite search.'
-      );
-    }
-
-    return fetchJson<BackendSearchResponse>(
-      '/api/data-sources/search',
-      {
-        method:
-          'POST',
-
-        headers: {
-          'Content-Type':
-            'application/json',
-        },
-
-        body:
-          JSON.stringify({
-            provider:
-              params.provider ||
-              'copernicus',
-
-            bbox:
-              params.bbox,
-
-            start_date:
-              params.start_date,
-
-            end_date:
-              params.end_date,
-
-            collection:
-              params.collection ||
-              'sentinel-2-l2a',
-
-            max_cloud_cover:
-              params.max_cloud_cover ??
-              null,
-
-            limit:
-              params.limit ||
-              10,
-          }),
-      }
-    );
-  },
-
-
-  // ==========================================================
-  // GET SATELLITE PROVIDERS
-  // ==========================================================
-
-  async getSatelliteProviders():
-    Promise<any[]> {
-
-    const data =
-      await fetchJson<{
-        providers?: any[];
-      }>(
-        '/api/data-sources/providers'
-      );
-
-    return Array.isArray(
-      data.providers
-    )
-      ? data.providers
-      : [];
-  },
-
-
-  // ==========================================================
-  // SATELLITE PROVIDER HEALTH
-  // ==========================================================
-
-  async getSatelliteProviderHealth():
-    Promise<any> {
-
-    return fetchJson<any>(
-      '/api/data-sources/health'
-    );
-  },
-
-
-  // ==========================================================
-  // GET CDSE PRODUCT
-  // ==========================================================
-
-  async getCopernicusProduct(
-    productId: string
-  ): Promise<any> {
-
-    if (
-      !productId ||
-      !productId.trim()
-    ) {
-      throw new Error(
-        'CDSE product ID is required.'
-      );
-    }
-
-    return fetchJson<any>(
-      `/api/data-sources/copernicus/product/${encodeURIComponent(
-        productId
-      )}`
-    );
-  },
-
-
-  // ==========================================================
-  // INGEST CDSE PRODUCT
-  // ==========================================================
-
-  async ingestCopernicusProduct(
-    productId: string,
-    modality: ModalityType = 'OPTICAL',
-    downloadProduct = true
-  ): Promise<Observation> {
-
-    if (
-      !productId ||
-      !productId.trim()
-    ) {
-      throw new Error(
-        'CDSE product ID is required.'
-      );
-    }
-
-    const response =
-      await fetchJson<BackendIngestResponse>(
-        '/api/data-sources/copernicus/ingest',
-        {
-          method:
-            'POST',
-
-          headers: {
-            'Content-Type':
-              'application/json',
-          },
-
-          body:
-            JSON.stringify({
-              product_id:
-                productId,
-
-              modality:
-                normalizeModalityForBackend(
-                  modality
-                ),
-
-              download_product:
-                downloadProduct,
-            }),
-        }
-      );
-
-    if (
-      !response.observation
-    ) {
-      throw new Error(
-        'CDSE ingestion succeeded but no observation was returned.'
-      );
-    }
-
-    const observation =
-      normalizeCDSEObservation(
-        response.observation,
-        modality
-      );
-
-    // Replace an existing observation with same ID.
-    userObservations =
-      userObservations.filter(
-        (item) =>
-          item.id !==
-          observation.id
-      );
-
-    userObservations.unshift(
-      observation
-    );
-
-    return observation;
-  },
-
-
-  // ==========================================================
-  // GET COPERNICUS QUICKLOOK URL
-  // ==========================================================
-
-  getCopernicusQuicklookUrl(
-    productId: string
-  ): string {
-
-    return (
-      `/api/data-sources/copernicus/quicklook/${encodeURIComponent(
-        productId
-      )}`
-    );
-  },
 };
 
 
@@ -1881,244 +1964,6 @@ function validateFrontendObservations(
       );
     }
   }
-}
-
-
-// ============================================================
-// CDSE OBSERVATION NORMALIZATION
-// ============================================================
-
-function normalizeCDSEObservation(
-  raw: any,
-  modality: ModalityType
-): Observation {
-
-  const productId =
-    raw.product_id ||
-    raw.productId;
-
-  const quicklook =
-    raw.image_url ||
-    raw.imageUrl ||
-    raw.thumbnail_url ||
-    raw.thumbnailUrl ||
-    (
-      productId
-        ? satQueryService
-          .getCopernicusQuicklookUrl(
-            String(productId)
-          )
-        : ''
-    );
-
-  const acquisitionDate =
-    raw.acquisition_date ||
-    raw.acquisitionDate ||
-    null;
-
-  const localPath =
-    raw.file_path ||
-    raw.local_path ||
-    undefined;
-
-  const metadata =
-    isRecord(
-      raw.product_metadata
-    )
-      ? raw.product_metadata
-      : {};
-
-  return {
-    id:
-      raw.id ||
-      `cdse-${productId || Date.now()}`,
-
-    name:
-      raw.name ||
-      raw.filename ||
-      productId ||
-      'Copernicus observation',
-
-    filename:
-      raw.filename ||
-      raw.name ||
-      productId ||
-      'Copernicus observation',
-
-    modality:
-      modality,
-
-    date:
-      acquisitionDate
-        ? formatObservationDate(
-          acquisitionDate
-        )
-        : 'DATE NOT AVAILABLE',
-
-    dimensions:
-      formatDimensions(
-        raw.dimensions
-      ) || 'Unknown',
-
-    status:
-      localPath
-        ? 'READY'
-        : 'READY',
-
-
-    metadata: {
-      ...metadata,
-
-      analysis_asset:
-        raw.analysis_asset ||
-        metadata.analysis_asset,
-
-      remote_analysis_asset:
-        raw.remote_analysis_asset ||
-        metadata.remote_analysis_asset,
-
-      analysis_asset_url:
-        raw.analysis_asset_url ||
-        metadata.analysis_asset_url,
-
-      remote_asset_url:
-        raw.remote_asset_url ||
-        metadata.remote_asset_url,
-
-      assets:
-        raw.assets ||
-        metadata.assets,
-
-      sensor:
-        raw.sensor ||
-        raw.platform ||
-        metadata.platform,
-
-      lat:
-        calculateCenterLatitude(
-          raw.bbox ||
-          metadata.bbox
-        ),
-
-      lon:
-        calculateCenterLongitude(
-          raw.bbox ||
-          metadata.bbox
-        ),
-
-      cloudCover:
-        formatOptionalPercentage(
-          raw.cloud_cover ??
-          metadata.cloud_cover
-        ),
-
-      bands:
-        Array.isArray(
-          raw.available_bands
-        )
-          ? `${raw.available_bands.length} Channels (${raw.available_bands.join(', ')})`
-          : 'Band information unavailable',
-
-      groundSamplingDistance:
-        typeof raw.resolution === 'number'
-          ? `${raw.resolution}m/px`
-          : 'Not available',
-
-      acquisitionTime:
-        acquisitionDate
-          ? formatAcquisitionTime(
-            acquisitionDate
-          )
-          : 'Not available',
-
-      provider:
-        raw.provider ||
-        'copernicus',
-
-      productId:
-        productId,
-
-      product_id:
-        productId,
-
-      processingLevel:
-        raw.processing_level,
-
-      collection:
-        raw.collection,
-
-      crs:
-        raw.crs,
-
-      geoFootprint:
-        raw.geo_footprint,
-    },
-
-    imageUrl:
-      quicklook,
-
-    thumbnailUrl:
-      quicklook,
-
-    isDemo:
-      false,
-
-    ...((
-      {
-        filePath:
-          localPath,
-
-        file_path:
-          localPath,
-
-        localPath:
-          localPath,
-
-        local_path:
-          localPath,
-
-        sourceType:
-          raw.source_type ||
-          'copernicus',
-
-        source_type:
-          raw.source_type ||
-          'copernicus',
-
-        ingestionStatus:
-          raw.ingestion_status ||
-          (
-            localPath
-              ? 'downloaded'
-              : 'catalogue_only'
-          ),
-
-        ingestion_status:
-          raw.ingestion_status ||
-          (
-            localPath
-              ? 'downloaded'
-              : 'catalogue_only'
-          ),
-
-        acquisitionDate:
-          acquisitionDate,
-
-        acquisition_date:
-          acquisitionDate,
-
-        provider:
-          raw.provider ||
-          'copernicus',
-
-        productId:
-          productId,
-
-        product_id:
-          productId,
-      } as any
-    )),
-  } as Observation;
 }
 
 
@@ -2336,70 +2181,7 @@ function findMetadataValue(
 }
 
 
-function calculateCenterLatitude(
-  bbox: unknown
-): number | undefined {
 
-  if (
-    !Array.isArray(
-      bbox
-    ) ||
-    bbox.length < 4
-  ) {
-    return undefined;
-  }
-
-  const minLat =
-    Number(bbox[1]);
-
-  const maxLat =
-    Number(bbox[3]);
-
-  if (
-    !Number.isFinite(minLat) ||
-    !Number.isFinite(maxLat)
-  ) {
-    return undefined;
-  }
-
-  return (
-    minLat +
-    maxLat
-  ) / 2;
-}
-
-
-function calculateCenterLongitude(
-  bbox: unknown
-): number | undefined {
-
-  if (
-    !Array.isArray(
-      bbox
-    ) ||
-    bbox.length < 4
-  ) {
-    return undefined;
-  }
-
-  const minLon =
-    Number(bbox[0]);
-
-  const maxLon =
-    Number(bbox[2]);
-
-  if (
-    !Number.isFinite(minLon) ||
-    !Number.isFinite(maxLon)
-  ) {
-    return undefined;
-  }
-
-  return (
-    minLon +
-    maxLon
-  ) / 2;
-}
 
 
 function formatModelAccuracy(

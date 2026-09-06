@@ -1,4 +1,5 @@
 import os
+import json
 import time
 from typing import Dict, Any, List, Optional
 
@@ -19,9 +20,11 @@ except ImportError:
     torch = None
 
 try:
-    from transformers import pipeline
+    from transformers import pipeline, BlipProcessor, BlipForQuestionAnswering
 except ImportError:
     pipeline = None
+    BlipProcessor = None
+    BlipForQuestionAnswering = None
 
 
 class _VisionLanguageModelRuntime:
@@ -55,11 +58,13 @@ class _VisionLanguageModelRuntime:
         self.model_id = (
             model_id.strip()
             if model_id
-            else ""
+            else "Salesforce/blip-vqa-base"
         )
 
         self.task = task
         self._pipeline = None
+        self._blip_processor = None
+        self._blip_model = None
         self._load_error: Optional[str] = None
 
     # ==================================================================
@@ -68,14 +73,11 @@ class _VisionLanguageModelRuntime:
 
     def load(self):
         """
-        Lazily initialize the Hugging Face inference pipeline.
-
-        The model is NOT downloaded when this Python module is imported.
-        It is loaded only when an actual analysis request reaches it.
+        Lazily initialize the Hugging Face inference model or pipeline.
         """
 
-        if self._pipeline is not None:
-            return self._pipeline
+        if self._blip_model is not None or self._pipeline is not None:
+            return
 
         if self._load_error is not None:
             raise RuntimeError(
@@ -84,19 +86,7 @@ class _VisionLanguageModelRuntime:
 
         if not self.model_id:
             self._load_error = (
-                "No vision-language model is configured. "
-                "Set the appropriate SATQUERY_*_MODEL_ID "
-                "environment variable before running analysis."
-            )
-            raise RuntimeError(
-                self._load_error
-            )
-
-        if pipeline is None:
-            self._load_error = (
-                "The 'transformers' package is not installed. "
-                "Install the project's ML dependencies before "
-                "running a generative remote-sensing model."
+                "No vision-language model is configured."
             )
             raise RuntimeError(
                 self._load_error
@@ -104,41 +94,52 @@ class _VisionLanguageModelRuntime:
 
         if torch is None:
             self._load_error = (
-                "The 'torch' package is not installed. "
-                "Install the project's ML dependencies before "
-                "running a generative remote-sensing model."
+                "The 'torch' package is not installed."
+            )
+            raise RuntimeError(
+                self._load_error
+            )
+
+        if BlipProcessor is None and pipeline is None:
+            self._load_error = (
+                "The 'transformers' package is not installed."
             )
             raise RuntimeError(
                 self._load_error
             )
 
         try:
-            device = (
-                0
-                if torch.cuda.is_available()
-                else -1
-            )
+            device = "cuda" if torch.cuda.is_available() else "cpu"
 
-            token = os.getenv(
-                "HUGGINGFACE_TOKEN"
-            )
+            # Use dedicated BlipProcessor + BlipForQuestionAnswering for Salesforce/blip-vqa-base and local checkpoints
+            is_local = os.path.isdir(self.model_id)
+            is_blip = "blip" in self.model_id.lower() or is_local
+            if is_blip and BlipProcessor is not None and BlipForQuestionAnswering is not None:
+                try:
+                    self._blip_processor = BlipProcessor.from_pretrained(self.model_id)
+                    self._blip_model = BlipForQuestionAnswering.from_pretrained(self.model_id)
+                    if device == "cuda":
+                        self._blip_model = self._blip_model.to("cuda")
+                    return
+                except Exception:
+                    if not is_local:
+                        raise
 
-            pipeline_kwargs = {
-                "task": self.task,
-                "model": self.model_id,
-                "device": device,
-            }
+            # Generic HF pipeline loader fallback
+            if pipeline is not None:
+                token = os.getenv("HUGGINGFACE_TOKEN")
+                pipeline_kwargs = {
+                    "task": self.task,
+                    "model": self.model_id,
+                    "device": 0 if device == "cuda" else -1,
+                }
+                if token:
+                    pipeline_kwargs["token"] = token
 
-            if token:
-                pipeline_kwargs[
-                    "token"
-                ] = token
+                self._pipeline = pipeline(**pipeline_kwargs)
+                return
 
-            self._pipeline = pipeline(
-                **pipeline_kwargs
-            )
-
-            return self._pipeline
+            raise RuntimeError(f"No compatible loader found for model '{self.model_id}'.")
 
         except Exception as exc:
             self._load_error = (
@@ -163,58 +164,44 @@ class _VisionLanguageModelRuntime:
     ) -> str:
         """
         Generate a response from the visual-language model.
-
-        The exact pipeline output varies between model families, so the
-        response is normalized into plain text.
         """
 
-        model_pipeline = self.load()
+        self.load()
 
-        generation_kwargs = {
-            "max_new_tokens": max_new_tokens,
-        }
+        if self._blip_processor is not None and self._blip_model is not None:
+            try:
+                inputs = self._blip_processor(images=image, text=prompt, return_tensors="pt")
+                if torch.cuda.is_available():
+                    inputs = {k: v.to("cuda") for k, v in inputs.items()}
+                out = self._blip_model.generate(**inputs, max_new_tokens=max_new_tokens)
+                answer = self._blip_processor.decode(out[0], skip_special_tokens=True).strip()
+                return answer
+            except Exception as exc:
+                raise RuntimeError(
+                    f"BLIP VQA generation failed: {exc}"
+                ) from exc
 
-        # Some pipeline/model combinations accept temperature while
-        # others don't. We only provide it when generation is stochastic.
-        if temperature > 0:
-            generation_kwargs[
-                "temperature"
-            ] = temperature
+        if self._pipeline is not None:
+            generation_kwargs = {
+                "max_new_tokens": max_new_tokens,
+            }
+            if temperature > 0:
+                generation_kwargs["temperature"] = temperature
 
-        try:
-            result = model_pipeline(
-                {
-                    "image": image,
-                    "text": prompt,
-                },
-                **generation_kwargs,
-            )
+            try:
+                result = self._pipeline(
+                    {"image": image, "text": prompt},
+                    **generation_kwargs,
+                )
+            except TypeError:
+                result = self._pipeline(
+                    [{"role": "user", "content": [{"type": "image", "image": image}, {"type": "text", "text": prompt}]}],
+                    **generation_kwargs,
+                )
 
-        except TypeError:
-            # Some Transformers versions/model pipelines use a different
-            # multimodal input format. Retry using a simple list format.
-            result = model_pipeline(
-                [
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "image",
-                                "image": image,
-                            },
-                            {
-                                "type": "text",
-                                "text": prompt,
-                            },
-                        ],
-                    }
-                ],
-                **generation_kwargs,
-            )
+            return self._extract_text(result)
 
-        return self._extract_text(
-            result
-        )
+        raise RuntimeError("No active VLM runtime available.")
 
     # ==================================================================
     # OUTPUT NORMALIZATION
@@ -475,23 +462,22 @@ class RemoteSensingVQAModel(BaseRSModel):
         )
 
         answer = None
-        cv_result = None
-
-        if self._runtime.model_id and pipeline is not None and torch is not None:
-            try:
-                answer = self._runtime.generate(
-                    image=image,
-                    prompt=prompt,
-                    max_new_tokens=int(os.getenv("SATQUERY_VQA_MAX_NEW_TOKENS", "256")),
-                    temperature=float(os.getenv("SATQUERY_VQA_TEMPERATURE", "0.2")),
-                )
-            except Exception as exc:
-                answer = None
+        try:
+            answer = self._runtime.generate(
+                image=image,
+                prompt=query,
+                max_new_tokens=int(os.getenv("SATQUERY_VQA_MAX_NEW_TOKENS", "256")),
+                temperature=float(os.getenv("SATQUERY_VQA_TEMPERATURE", "0.2")),
+            )
+        except Exception as exc:
+            raise RuntimeError(
+                f"VLM inference failed for model '{self._runtime.model_id}': {exc}"
+            ) from exc
 
         if not answer or not str(answer).strip():
-            # Perform real computer-vision pixel feature extraction on the satellite asset
-            cv_result = self._analyze_image_features(image, query)
-            answer = cv_result["answer"]
+            raise RuntimeError(
+                f"VLM model '{self._runtime.model_id}' returned an empty response."
+            )
 
         inference_time_ms = round(
             (
@@ -502,13 +488,10 @@ class RemoteSensingVQAModel(BaseRSModel):
             2,
         )
 
-
-        confidence_score = cv_result["confidence"] if cv_result else self._get_model_confidence()
-
         result = {
             "answer": answer,
 
-            "confidence": confidence_score,
+            "confidence": None,  # Uncalibrated VLM generation score per Task 7
 
             "visual_evidence": {
                 "overlay_type": "vqa_attention",
@@ -519,16 +502,22 @@ class RemoteSensingVQAModel(BaseRSModel):
 
             "execution_details": {
                 "model_architecture": self.name,
-                "model_id": self._runtime.model_id or "SatQuery CV Feature Engine",
-                "provider": self.provider if not cv_result else "satquery-cv-engine",
+                "model_id": self._runtime.model_id,
+                "provider": self.provider,
                 "inference_time_ms": inference_time_ms,
+                "model_execution": "success",
+                "execution_status": "success",
                 "parameters_used": {
                     "input_type": metadata.get("model_input_type", "single_optical"),
-                    "mode": "generative_vlm" if not cv_result else "spectral_pixel_inspection",
+                    "mode": "generative_vlm",
                 },
-                "dataset_reference": os.getenv(
-                    "SATQUERY_VQA_DATASET_REFERENCE",
-                    "Copernicus Sentinel-2 Remote-Sensing Imagery",
+                "dataset_reference": (
+                    json.load(open(os.path.join(self._runtime.model_id, "training_metadata.json"), "r", encoding="utf-8")).get("dataset", {}).get("manifest", "BigEarthNet.txt")
+                    if os.path.isdir(self._runtime.model_id) and os.path.isfile(os.path.join(self._runtime.model_id, "training_metadata.json"))
+                    else os.getenv(
+                        "SATQUERY_VQA_DATASET_REFERENCE",
+                        "Salesforce/blip-vqa-base",
+                    )
                 ),
             },
         }
@@ -536,89 +525,6 @@ class RemoteSensingVQAModel(BaseRSModel):
         return self.validate_result(
             result
         )
-
-    def _analyze_image_features(self, image: Any, query: str) -> Dict[str, Any]:
-        """
-        Perform real computer-vision pixel analysis on the satellite image.
-        Extracts spectral channels, land-cover distribution, brightness, and vegetation/water metrics.
-        """
-        import numpy as np
-        
-        try:
-            rgb_img = image.convert("RGB")
-            img_np = np.array(rgb_img, dtype=np.float32)
-            h, w, c = img_np.shape
-            total_pixels = float(max(1, h * w))
-            
-            r, g, b = img_np[:, :, 0], img_np[:, :, 1], img_np[:, :, 2]
-            
-            mean_r, mean_g, mean_b = float(np.mean(r)), float(np.mean(g)), float(np.mean(b))
-            brightness = float((mean_r + mean_g + mean_b) / 3.0)
-            
-            # 1. Excess Greenness Index (ExG = 2G - R - B) -> Vegetation
-            exg = (2.0 * g) - r - b
-            veg_mask = (exg > 10.0) & (g > r)
-            veg_pct = float((np.sum(veg_mask) / total_pixels) * 100.0)
-            
-            # 2. Water index estimate (NDWI_RGB = (Green - Red)/(Green + Red))
-            ndwi_rgb = (g - r) / (g + r + 1e-5)
-            water_mask = ((ndwi_rgb > -0.02) | (b > r * 1.05)) & (r < 130) & (~veg_mask)
-            water_pct = float((np.sum(water_mask) / total_pixels) * 100.0)
-            
-            # 3. Bright / Cloud / Albedo mask
-            cloud_mask = (r > 200) & (g > 200) & (b > 200) & (np.abs(r - g) < 25) & (np.abs(g - b) < 25)
-            cloud_pct = float((np.sum(cloud_mask) / total_pixels) * 100.0)
-            
-            # 4. Built-up / Barren land estimate
-            built_mask = (~veg_mask) & (~water_mask) & (~cloud_mask)
-            built_pct = float((np.sum(built_mask) / total_pixels) * 100.0)
-            
-            q_lower = query.lower()
-            
-            if "water" in q_lower or "river" in q_lower or "lake" in q_lower or "ocean" in q_lower:
-                answer = (
-                    f"Pixel-level spectral analysis of the observation indicates approximately {water_pct:.2f}% water coverage "
-                    f"across the {w}x{h} pixel scene. Mean channel reflectance: Blue {mean_b:.1f}, Green {mean_g:.1f}, Red {mean_r:.1f}."
-                )
-            elif "green" in q_lower or "tree" in q_lower or "forest" in q_lower or "crop" in q_lower or "vegetation" in q_lower:
-                answer = (
-                    f"Vegetation feature extraction (Excess Greenness Index) identifies {veg_pct:.2f}% canopy/vegetation cover "
-                    f"across the scene. Land cover breakdown: {veg_pct:.1f}% vegetation, {water_pct:.1f}% water, {built_pct:.1f}% built-up/barren, {cloud_pct:.1f}% high-albedo/cloud features."
-                )
-            elif "cloud" in q_lower or "weather" in q_lower or "albedo" in q_lower:
-                answer = (
-                    f"High-reflectance pixel analysis detects approximately {cloud_pct:.2f}% cloud/high-albedo surface area. "
-                    f"Mean scene brightness index is {brightness:.1f}/255."
-                )
-            elif "building" in q_lower or "urban" in q_lower or "city" in q_lower or "built" in q_lower or "structure" in q_lower:
-                answer = (
-                    f"Barren and built-up land reflectance estimation identifies approximately {built_pct:.2f}% urban/impervious/barren surface area "
-                    f"in the {w}x{h} pixel observation."
-                )
-            else:
-                answer = (
-                    f"Visual feature extraction of the {w}x{h} satellite scene reveals a land cover composition of: "
-                    f"{veg_pct:.1f}% vegetation, {water_pct:.1f}% water, {built_pct:.1f}% built-up/barren land, and {cloud_pct:.1f}% cloud/high-albedo features. "
-                    f"Average channel reflectance: Red={mean_r:.1f}, Green={mean_g:.1f}, Blue={mean_b:.1f} (Overall brightness: {brightness:.1f}/255)."
-                )
-
-            return {
-                "answer": answer,
-                "confidence": 88.0,
-                "metrics": {
-                    "vegetation_pct": round(veg_pct, 2),
-                    "water_pct": round(water_pct, 2),
-                    "built_pct": round(built_pct, 2),
-                    "cloud_pct": round(cloud_pct, 2),
-                    "scene_dimensions": f"{w}x{h}",
-                }
-            }
-        except Exception as exc:
-            return {
-                "answer": f"Visual inspection of the observation was completed for query: {query}",
-                "confidence": 75.0,
-                "metrics": {}
-            }
 
     # ==================================================================
     # PROMPT CONSTRUCTION
@@ -852,24 +758,22 @@ class RemoteSensingCaptioningModel(BaseRSModel):
         )
 
         answer = None
-        confidence = 0.90
-        if self._runtime.model_id:
-            try:
-                answer = self._runtime.generate(
-                    image=image,
-                    prompt=prompt,
-                    max_new_tokens=int(os.getenv("SATQUERY_CAPTION_MAX_NEW_TOKENS", "256")),
-                    temperature=float(os.getenv("SATQUERY_CAPTION_TEMPERATURE", "0.2")),
-                )
-                confidence = self._get_model_confidence() or 0.88
-            except Exception as exc:
-                pass
+        try:
+            answer = self._runtime.generate(
+                image=image,
+                prompt=prompt,
+                max_new_tokens=int(os.getenv("SATQUERY_CAPTION_MAX_NEW_TOKENS", "256")),
+                temperature=float(os.getenv("SATQUERY_CAPTION_TEMPERATURE", "0.2")),
+            )
+        except Exception as exc:
+            raise RuntimeError(
+                f"Caption VLM inference failed for model '{self._runtime.model_id}': {exc}"
+            ) from exc
 
-        if not answer:
-            pil_img = ImageResolver.load_image(observation)
-            vqa_res = ImageResolver.process_vqa_and_caption(pil_img, query)
-            answer = vqa_res["answer"]
-            confidence = vqa_res["confidence"]
+        if not answer or not str(answer).strip():
+            raise RuntimeError(
+                f"Caption model '{self._runtime.model_id}' returned an empty response."
+            )
 
         inference_time_ms = round(
             (
@@ -880,11 +784,10 @@ class RemoteSensingCaptioningModel(BaseRSModel):
             2,
         )
 
-
         result = {
             "answer": answer,
 
-            "confidence": self._get_model_confidence(),
+            "confidence": 0,  # Uncalibrated VLM generation score per Task 7
 
             "visual_evidence": {
                 "overlay_type": "scene_description",
@@ -896,6 +799,9 @@ class RemoteSensingCaptioningModel(BaseRSModel):
                 "model_architecture": self.name,
                 "model_id": self._runtime.model_id,
                 "provider": self.provider,
+                "inference_time_ms": inference_time_ms,
+                "model_execution": "success",
+                "execution_status": "success",
                 "inference_time_ms": inference_time_ms,
                 "parameters_used": {
                     "max_new_tokens": int(

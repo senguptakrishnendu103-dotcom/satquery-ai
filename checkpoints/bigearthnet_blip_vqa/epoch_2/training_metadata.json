@@ -1,0 +1,48 @@
+{
+  "base_model_id": "Salesforce/blip-vqa-base",
+  "adapted_checkpoint": "checkpoints/bigearthnet_blip_vqa\\epoch_2",
+  "dataset": {
+    "manifest": "training/data/BigEarthNet.txt",
+    "data_dir": "training/data/patches",
+    "task_type": "all",
+    "train_samples": 5,
+    "val_samples": 1
+  },
+  "training_config": {
+    "base_model_id": "Salesforce/blip-vqa-base",
+    "task": "image-text-to-text",
+    "adaptation_mode": "full",
+    "dataset_manifest": "training/data/BigEarthNet.txt",
+    "data_dir": "training/data/patches",
+    "task_type": "all",
+    "filter_classes": null,
+    "val_split": 0.2,
+    "max_length": 64,
+    "seed": 42,
+    "batch_size": 2,
+    "num_epochs": 2,
+    "learning_rate": 5e-05,
+    "weight_decay": 0.01,
+    "warmup_ratio": 0.1,
+    "gradient_accumulation_steps": 1,
+    "max_grad_norm": 1.0,
+    "lora_r": 16,
+    "lora_alpha": 32,
+    "lora_dropout": 0.05,
+    "target_modules": null,
+    "output_dir": "checkpoints/bigearthnet_blip_vqa",
+    "save_every_epoch": true,
+    "save_best_only": false,
+    "device": "cuda",
+    "resume_from_checkpoint": "checkpoints/bigearthnet_blip_vqa/epoch_1",
+    "smoke_test": true,
+    "smoke_samples": 6
+  },
+  "metrics": {
+    "epoch": 2,
+    "val_loss": 10.151692390441895,
+    "train_loss": 10.7967316309611
+  },
+  "created_at": "2026-09-05T23:16:00.877564Z",
+  "model_type": "BigEarthNet-Adapted-BLIP-VQA"
+}

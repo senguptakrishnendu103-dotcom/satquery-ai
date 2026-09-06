@@ -3,7 +3,7 @@ Raster ingestion utilities for SatQuery AI.
 
 Purpose
 -------
-Turn a downloaded Copernicus Data Space product archive into a model-readable
+Turn a satellite product archive into a model-readable
 manifest of real raster assets.
 
 Supported product families
@@ -15,7 +15,7 @@ The ingestor deliberately does NOT fabricate imagery or synthetic bands.
 
 Typical flow
 ------------
-1. download a CDSE product archive with the existing backend/provider code
+1. provide a satellite product archive (ZIP/SAFE)
 2. call RasterIngestor.ingest_archive(...)
 3. receive an analysis manifest containing:
    - product type/platform
@@ -562,7 +562,7 @@ class RasterIngestor:
         if archive.suffix.lower() not in SUPPORTED_ARCHIVE_SUFFIXES:
             raise ValueError(
                 f"Unsupported archive format '{archive.suffix}'. "
-                "Expected a CDSE ZIP product."
+                "Expected a ZIP product archive."
             )
 
         product_key = self._safe_product_key(product_id or archive.stem)
@@ -596,7 +596,7 @@ class RasterIngestor:
 
         if family == "unknown":
             raise ValueError(
-                "Unable to determine whether the CDSE product is Sentinel-1 "
+                "Unable to determine whether the satellite product is Sentinel-1 "
                 "or Sentinel-2 from its archive structure/name."
             )
 
@@ -858,7 +858,7 @@ class RasterIngestor:
         return min(resolutions) if resolutions else 10.0
 
 
-def ingest_cdse_archive(
+def ingest_product_archive(
     archive_path: os.PathLike[str] | str,
     storage_dir: os.PathLike[str] | str,
     *,

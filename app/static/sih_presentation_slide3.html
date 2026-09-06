@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SatQuery AI — SIH 2026 Slide 3: Technical Approach</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+    body {
+      background: #0f172a;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 24px;
+    }
+    .slide-container {
+      width: 1200px;
+      height: 675px; /* Exact 16:9 ratio */
+      background: #ffffff;
+      border-radius: 8px;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    /* Top Header */
+    .slide-header {
+      padding: 24px 36px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .team-badge {
+      border: 2.5px solid #6b21a8;
+      border-radius: 50%;
+      width: 140px;
+      height: 70px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      line-height: 1.2;
+      color: #1e293b;
+      font-weight: 700;
+      font-size: 15px;
+      background: #faf5ff;
+    }
+    .idea-title {
+      font-size: 28px;
+      font-weight: 900;
+      letter-spacing: 0.5px;
+      color: #0f172a;
+      text-align: center;
+      text-transform: uppercase;
+      font-family: Georgia, serif;
+    }
+    .sih-logo-area {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .brain-icon {
+      width: 44px;
+      height: 52px;
+    }
+    .sih-text {
+      text-align: left;
+      line-height: 1.15;
+    }
+    .sih-text .title {
+      font-size: 14px;
+      font-weight: 800;
+      color: #334155;
+      letter-spacing: 0.5px;
+    }
+    .sih-text .year {
+      font-size: 19px;
+      font-weight: 900;
+      color: #0284c7;
+    }
+
+    /* Content Cards Grid */
+    .content-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      padding: 10px 36px 0;
+      flex: 1;
+    }
+    .content-card {
+      background: #f8fafc;
+      border: 1.5px solid #e2e8f0;
+      border-radius: 10px;
+      padding: 20px 20px;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+    }
+    .card-header {
+      font-size: 17px;
+      font-weight: 800;
+      color: #0f172a;
+      margin-bottom: 14px;
+      padding-bottom: 10px;
+      border-bottom: 2px solid #0284c7;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .card-header svg {
+      width: 20px;
+      height: 20px;
+      color: #0284c7;
+    }
+    .bullet-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      font-size: 13px;
+      line-height: 1.45;
+      color: #334155;
+    }
+    .bullet-item {
+      position: relative;
+      padding-left: 18px;
+    }
+    .bullet-item::before {
+      content: "•";
+      position: absolute;
+      left: 0;
+      top: -2px;
+      color: #0284c7;
+      font-size: 18px;
+      font-weight: bold;
+    }
+    .lead-text {
+      font-weight: 700;
+      color: #0f172a;
+    }
+    .method-step {
+      font-weight: 800;
+      color: #0369a1;
+    }
+
+    /* Footer */
+    .slide-footer {
+      background: #0284c7;
+      color: #ffffff;
+      padding: 10px 36px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 13px;
+      font-weight: 600;
+      margin-top: auto;
+    }
+    .footer-page {
+      font-size: 16px;
+      font-weight: 800;
+    }
+
+    /* Action bar */
+    .action-bar {
+      margin-top: 16px;
+      display: flex;
+      gap: 16px;
+      align-items: center;
+    }
+    .btn {
+      background: #0284c7;
+      color: white;
+      text-decoration: none;
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-weight: 600;
+      font-size: 13px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: background 0.2s;
+    }
+    .btn:hover {
+      background: #0369a1;
+    }
+    .btn-secondary {
+      background: #334155;
+    }
+    .btn-secondary:hover {
+      background: #1e293b;
+    }
+    .badge {
+      background: #22c55e;
+      color: white;
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="slide-container" id="sih-slide-3">
+    <!-- Top Bar -->
+    <div class="slide-header">
+      <div class="team-badge">
+        <span>Your Team</span>
+        <span>Name</span>
+      </div>
+
+      <div class="idea-title">
+        TECHNICAL APPROACH
+      </div>
+
+      <div class="sih-logo-area">
+        <svg class="brain-icon" viewBox="0 0 100 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M48 10C35 10 20 22 20 38C15 42 12 48 12 56C12 65 18 72 20 78C16 84 18 94 25 100C32 106 42 108 48 108V10Z" fill="#F97316"/>
+          <path d="M52 10C65 10 80 22 80 38C85 42 88 48 88 56C88 65 82 72 80 78C84 84 82 94 75 100C68 106 58 108 52 108V10Z" fill="#10B981"/>
+          <line x1="58" y1="30" x2="72" y2="30" stroke="#ffffff" stroke-width="3"/>
+          <circle cx="74" cy="30" r="3" fill="#ffffff"/>
+          <line x1="62" y1="50" x2="78" y2="50" stroke="#ffffff" stroke-width="3"/>
+          <circle cx="80" cy="50" r="3" fill="#ffffff"/>
+          <line x1="58" y1="70" x2="70" y2="70" stroke="#ffffff" stroke-width="3"/>
+          <circle cx="72" cy="70" r="3" fill="#ffffff"/>
+          <line x1="62" y1="90" x2="74" y2="90" stroke="#ffffff" stroke-width="3"/>
+          <circle cx="76" cy="90" r="3" fill="#ffffff"/>
+        </svg>
+        <div class="sih-text">
+          <div class="title">SMART INDIA</div>
+          <div class="title">HACKATHON</div>
+          <div class="year">2026</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2 Main Columns -->
+    <div class="content-grid">
+      <!-- Column 1: Technologies to be used -->
+      <div class="content-card">
+        <div class="card-header">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/></svg>
+          Technologies to be Used (Stack & Hardware)
+        </div>
+        <ul class="bullet-list">
+          <li class="bullet-item">
+            <span class="lead-text">Languages:</span> Python 3.11 (Core AI/Geospatial Engines), TypeScript & JavaScript (Frontend Web App).
+          </li>
+          <li class="bullet-item">
+            <span class="lead-text">AI & Deep Learning:</span> PyTorch, Hugging Face Transformers, PEFT/LoRA (RS-VLM adapted on BigEarthNet.txt).
+          </li>
+          <li class="bullet-item">
+            <span class="lead-text">Geospatial & Ingestion:</span> Rasterio, GDAL, NumPy, SciPy, Shapely (GeoTIFF, CRS reprojection, affine matrices, radiometry).
+          </li>
+          <li class="bullet-item">
+            <span class="lead-text">API & Gateway:</span> FastAPI (high-concurrency async REST API), Uvicorn, Pydantic v2 (strict request validation schemas).
+          </li>
+          <li class="bullet-item">
+            <span class="lead-text">GIS Frontend:</span> React 19, Vite, MapLibre GL (WebGL map canvas, change-wipe slider), Tailwind CSS.
+          </li>
+          <li class="bullet-item">
+            <span class="lead-text">Hardware & Compute:</span> Optimized CPU inference (PyTorch CPU / NumPy) with dynamic CUDA GPU acceleration when deployed on NVIDIA hardware.
+          </li>
+        </ul>
+      </div>
+
+      <!-- Column 2: Methodology & Process -->
+      <div class="content-card">
+        <div class="card-header">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+          Methodology & Implementation Process
+        </div>
+        <ul class="bullet-list">
+          <li class="bullet-item">
+            <span class="method-step">1. Raster Ingestion (RasterIngestor):</span> Reads GeoTIFF headers, checks CRS & bounds overlap, calibrates SAR σ⁰ dB and optical reflectance.
+          </li>
+          <li class="bullet-item">
+            <span class="method-step">2. Intent Classification (QueryClassifier):</span> Extracts linguistic task (VQA, Grounding, Change, Fusion) & keywords from user query.
+          </li>
+          <li class="bullet-item">
+            <span class="method-step">3. Agentic Routing (AgentOrchestrator):</span> Enforces input-mode constraints and dynamically dispatches to verified specialists in ModelRegistry.
+          </li>
+          <li class="bullet-item">
+            <span class="method-step">4. Specialist Model Execution:</span> Runs fine-tuned RS-VLM for questions, grounding model for boxes, change detector for difference maps, or optical-SAR fusion.
+          </li>
+          <li class="bullet-item">
+            <span class="method-step">5. Evidence & Audit (ExecutionTracker):</span> Overlays GeoJSON vector masks on MapLibre map, computes honest confidence, and logs telemetry trace.
+          </li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Bottom Footer -->
+    <div class="slide-footer">
+      <div>@SIH Idea submission- Template</div>
+      <div class="footer-page">3</div>
+    </div>
+  </div>
+
+  <div class="action-bar">
+    <a class="btn btn-secondary" href="/static/sih_presentation.html">← View Slide 2 (Proposed Solution)</a>
+    <a class="btn" href="/static/sih_presentation_slide3.html">View Slide 3 (Technical Approach)</a>
+    <span class="badge">SIH26167 COMPLIANT</span>
+    <span style="color: #94a3b8; font-size: 13px;">File: <code>d:\PROJECTS-PUPU\satquery-ai\SatQuery_AI_SIH26167_Presentation.pptx</code></span>
+  </div>
+
+</body>
+</html>

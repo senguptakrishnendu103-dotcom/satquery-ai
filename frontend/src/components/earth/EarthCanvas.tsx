@@ -110,46 +110,24 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
 
   const [compareMode, setCompareMode] = useState<
     'BEFORE' | 'AFTER' | 'CHANGE'
-  >('CHANGE');
+  >('BEFORE');
 
   const [wipePosition, setWipePosition] = useState(50);
   const [showOverlays, setShowOverlays] = useState(true);
   const [showGrid, setShowGrid] = useState(true);
 
   const [overlayMode, setOverlayMode] =
-    useState<CanvasOverlayMode>('HEATMAP');
+    useState<CanvasOverlayMode>('EVIDENCE');
 
   const handleSetCompareMode = (mode: 'BEFORE' | 'AFTER' | 'CHANGE') => {
     setCompareMode(mode);
-    if (mode === 'CHANGE') {
-      setOverlayMode('HEATMAP');
-      setShowOverlays(true);
-    }
   };
 
-  // Heatmap intensity zones: use evidence regions if available, or generate dynamic change zones
+  // Heatmap intensity zones: use evidence regions if available from active analysis result
   const heatmapRegions = (activeResult?.evidence && activeResult.evidence.length > 0)
     ? activeResult.evidence
-    : [
-        {
-          id: 'hm-fallback-1',
-          label: 'Primary Surface Delta Zone',
-          confidence: 94,
-          coords: { x: 38, y: 34, width: 26, height: 24 }
-        },
-        {
-          id: 'hm-fallback-2',
-          label: 'Secondary Water/Vegetation Change',
-          confidence: 87,
-          coords: { x: 62, y: 56, width: 22, height: 20 }
-        },
-        {
-          id: 'hm-fallback-3',
-          label: 'Urban Structure Anomaly',
-          confidence: 79,
-          coords: { x: 24, y: 68, width: 18, height: 18 }
-        }
-      ];
+    : [];
+
 
   // ================================================================
   // CURSOR / HUD
@@ -193,21 +171,24 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
 
     return {
       satellite:
-        metadata?.sensor ||
-        activeObservation?.name ||
-        'REMOTE SENSOR',
+        typeof metadata?.sensor === 'object' && metadata?.sensor !== null
+          ? JSON.stringify(metadata?.sensor)
+          : String(metadata?.sensor || activeObservation?.name || 'REMOTE SENSOR'),
       modality:
-        activeObservation?.modality || 'OPTICAL',
+        String(activeObservation?.modality || 'OPTICAL'),
       resolution:
-        metadata?.groundSamplingDistance ||
-        activeObservation?.dimensions ||
-        'N/A',
+        typeof metadata?.groundSamplingDistance === 'object' && metadata?.groundSamplingDistance !== null
+          ? JSON.stringify(metadata?.groundSamplingDistance)
+          : String(metadata?.groundSamplingDistance || activeObservation?.dimensions || 'N/A'),
       cloud:
-        (metadata as any)?.cloudCover ?? 'N/A',
+        typeof (metadata as any)?.cloudCover === 'object' && (metadata as any)?.cloudCover !== null
+          ? JSON.stringify((metadata as any)?.cloudCover)
+          : String((metadata as any)?.cloudCover ?? 'N/A'),
       acquisition:
-        activeObservation?.date || 'N/A',
+        String(activeObservation?.date || 'N/A'),
     };
   }, [activeObservation]);
+
 
   // ================================================================
   // ZOOM
@@ -937,7 +918,7 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
                 CHANGE / HEATMAP VISUALIZATION
             ====================================================== */}
 
-            {showOverlays && overlayMode === 'HEATMAP' && (
+            {showOverlays && overlayMode === 'HEATMAP' && activeResult && heatmapRegions.length > 0 && (
               <div
                 className="
                   pointer-events-none
@@ -1283,12 +1264,13 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
 
 interface TelemetryCellProps {
   label: string;
-  value: string;
+  value: any;
 }
 
 const TelemetryCell: React.FC<
   TelemetryCellProps
 > = ({ label, value }) => {
+  const displayVal = typeof value === 'object' && value !== null ? JSON.stringify(value) : String(value || 'N/A');
   return (
     <div className="min-w-0 bg-sat-bg/90 px-2 py-2">
       <div className="font-mono text-[6px] uppercase tracking-wider text-sat-dim">
@@ -1304,9 +1286,9 @@ const TelemetryCell: React.FC<
           font-semibold
           text-sat-text
         "
-        title={value}
+        title={displayVal}
       >
-        {value || 'N/A'}
+        {displayVal}
       </div>
     </div>
   );

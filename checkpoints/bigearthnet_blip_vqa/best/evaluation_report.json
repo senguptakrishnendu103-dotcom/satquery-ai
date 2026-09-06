@@ -1,0 +1,25 @@
+{
+  "checkpoint_dir": "checkpoints/bigearthnet_blip_vqa/best",
+  "manifest_path": "training/data/BigEarthNet.txt",
+  "task_type": "all",
+  "evaluated_at": "2026-09-05T23:17:33.023007Z",
+  "total_evaluated": 1,
+  "metrics": {
+    "exact_match_accuracy_percent": 100.0,
+    "keyword_match_accuracy_percent": 100.0,
+    "average_token_f1_percent": 100.0,
+    "avg_inference_latency_ms": 4632.18
+  },
+  "samples": [
+    {
+      "sample_id": "S2B_MSIL2A_20170718T102021_N0205_R065_T32TNR_34_76",
+      "question": "Does this satellite observation contain water bodies or wetlands?",
+      "ground_truth": "no",
+      "predicted_answer": "no",
+      "exact_match": true,
+      "keyword_match": true,
+      "token_f1": 1.0,
+      "latency_ms": 4632.18
+    }
+  ]
+}

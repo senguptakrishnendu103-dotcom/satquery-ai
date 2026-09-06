@@ -283,7 +283,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnterWorkspace, onVi
                 </div>
                 <div>LAT: <span className="text-sat-accent font-bold">{displayLat}</span></div>
                 <div>LON: <span className="text-sat-accent font-bold">{displayLon}</span></div>
-                <div>SENSOR: <span className="text-sat-text">{mode === 'LIVE_SCAN' ? 'CDSE REALTIME STAC' : currentObs.sensor}</span></div>
+                <div>SENSOR: <span className="text-sat-text">{mode === 'LIVE_SCAN' ? 'REALTIME SATELLITE RASTER' : currentObs.sensor}</span></div>
                 <div className="text-sat-change font-bold pt-0.5 truncate">
                   {mode === 'LIVE_SCAN' ? '🔴 Live Downlink Active' : currentObs.delta}
                 </div>

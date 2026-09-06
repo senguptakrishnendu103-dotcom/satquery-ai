@@ -662,7 +662,7 @@ class BiTemporalChangeDetectionModel(BaseRSModel):
 
         return {
             "answer": answer,
-            "confidence": 0.0,
+            "confidence": None,
             "execution_status": "completed",
             "visual_evidence": {
                 "overlay_type": "change_detection_mask",
@@ -1023,14 +1023,18 @@ class BiTemporalChangeDetectionModel(BaseRSModel):
     @staticmethod
     def _normalize_confidence(
         confidence: Any,
-    ) -> float:
+    ) -> Optional[float]:
         if confidence is None:
-            return 0.0
+            return None
+
+        val_str = str(confidence).strip().lower()
+        if val_str in {"none", "null", "unavailable", "n/a", ""}:
+            return None
 
         try:
             value = float(confidence)
         except (TypeError, ValueError):
-            return 0.0
+            return None
 
         if 1.0 < value <= 100.0:
             value /= 100.0

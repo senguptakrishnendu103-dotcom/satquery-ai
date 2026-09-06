@@ -29,9 +29,9 @@ import { ResultPanel } from './components/result/ResultPanel';
 import { AnalysisReplayModal } from './components/replay/AnalysisReplayModal';
 import { HistoryView } from './components/history/HistoryView';
 import { DemoSelectorModal } from './components/demo/DemoSelectorModal';
-import { SatelliteSearchModal } from './components/observation/SatelliteSearchModal';
 import { SettingsModal } from './components/settings/SettingsModal';
 import { LiveSpaceBackground } from './components/background/LiveSpaceBackground';
+import { ErrorBoundary } from './components/common/ErrorBoundary';
 
 
 // ============================================================
@@ -185,40 +185,6 @@ function observationHasModelAsset(
 }
 
 
-function normalizeModality(
-  modality: unknown
-): ModalityType {
-  const value =
-    String(
-      modality ||
-      'OPTICAL'
-    )
-      .trim()
-      .toUpperCase();
-
-  if (
-    value === 'SAR' ||
-    value === 'RADAR'
-  ) {
-    return 'SAR';
-  }
-
-  if (
-    value === 'MULTISPECTRAL' ||
-    value === 'MULTI-SPECTRAL' ||
-    value === 'MS'
-  ) {
-    return 'MULTISPECTRAL';
-  }
-
-  if (
-    value === 'THERMAL'
-  ) {
-    return 'THERMAL';
-  }
-
-  return 'OPTICAL';
-}
 
 
 // ============================================================
@@ -236,13 +202,6 @@ export function App() {
     setActiveView,
   ] = useState<ActiveView>(
     'LANDING'
-  );
-
-  const [
-    isSearchModalOpen,
-    setIsSearchModalOpen,
-  ] = useState<boolean>(
-    false
   );
 
   const [
@@ -348,19 +307,14 @@ export function App() {
     observations,
     setObservations,
   ] = useState<Observation[]>(
-    DEMO_SCENARIOS[2].observations
+    []
   );
 
   const [
     activeObservationIds,
     setActiveObservationIds,
   ] = useState<string[]>(
-    DEMO_SCENARIOS[2]
-      .observations
-      .map(
-        observation =>
-          observation.id
-      )
+    []
   );
 
 
@@ -686,194 +640,31 @@ export function App() {
 
 
   // ==========================================================
-  // CDSE PRODUCT INGESTION
+  // SIH BENCHMARK OBSERVATION LOADED
   // ==========================================================
 
-  const handleAddObservationFromProduct =
-    async (
-      productOrObservation: any
-    ) => {
+  const handleSIHObservationLoaded = (
+    observation: Observation,
+    suggestedQuery?: string
+  ) => {
+    setObservations(previous => {
+      const exists = previous.some(o => o.id === observation.id);
+      return exists ? previous : [observation, ...previous];
+    });
 
-      setAppError(
-        null
-      );
+    setActiveObservationIds(previous => {
+      if (previous.includes(observation.id)) return previous;
+      return [observation.id, ...previous];
+    });
 
-      try {
+    if (suggestedQuery) {
+      setCurrentQueryText(suggestedQuery);
+    }
 
-        // ------------------------------------------------------
-        // The updated SatelliteSearchModal sends the already
-        // ingested Observation returned by the backend.
-        //
-        // Keep a compatibility path for callers that still
-        // provide a raw CDSE product object.
-        // ------------------------------------------------------
-
-        const candidate =
-          productOrObservation as any;
-
-        const hasObservationIdentity =
-          Boolean(
-            candidate &&
-            candidate.id &&
-            (
-              candidate.sourceType ||
-              candidate.source_type ||
-              candidate.ingestionStatus ||
-              candidate.ingestion_status
-            )
-          );
-
-        let observation:
-          Observation;
-
-        if (
-          hasObservationIdentity &&
-          candidate.filename
-        ) {
-
-          observation =
-            candidate as Observation;
-
-        } else {
-
-          // ----------------------------------------------------
-          // Legacy/raw product compatibility.
-          //
-          // IMPORTANT:
-          // Never construct a fake READY observation.
-          // Delegate ingestion to the backend instead.
-          // ----------------------------------------------------
-
-          const productId =
-            candidate?.product_id ||
-            candidate?.productId ||
-            candidate?.id;
-
-          if (
-            !productId
-          ) {
-            throw new Error(
-              'The selected Copernicus product has no product ID.'
-            );
-          }
-
-          const modality =
-            normalizeModality(
-              candidate?.modality
-            );
-
-          observation =
-            await satQueryService
-              .ingestCopernicusProduct(
-                String(
-                  productId
-                ),
-                modality,
-                true
-              );
-        }
-
-        // ------------------------------------------------------
-        // Verify that CDSE ingestion actually produced a
-        // model-readable local asset.
-        // ------------------------------------------------------
-
-        if (
-          !observationHasModelAsset(
-            observation
-          )
-        ) {
-
-          const productId =
-            getObservationProductId(
-              observation
-            ) ||
-            'selected product';
-
-          throw new Error(
-            `The Copernicus product "${productId}" was selected, ` +
-            `but the backend did not return a model-readable ` +
-            `analysis asset. The product has not been marked READY.`
-          );
-        }
-
-        // ------------------------------------------------------
-        // Make sure it's represented as a real external
-        // observation rather than a demo.
-        // ------------------------------------------------------
-
-        const normalizedObservation =
-          {
-            ...observation,
-
-            isDemo:
-              false,
-
-            status:
-              'READY',
-          } as Observation;
-
-        // ------------------------------------------------------
-        // Replace same observation if it already exists.
-        // ------------------------------------------------------
-
-        setObservations(
-          previous => {
-
-            const withoutDuplicate =
-              previous.filter(
-                existing =>
-                  existing.id !==
-                  normalizedObservation.id
-              );
-
-            return [
-              normalizedObservation,
-              ...withoutDuplicate,
-            ];
-          }
-        );
-
-        // ------------------------------------------------------
-        // Activate only the new CDSE observation.
-        // ------------------------------------------------------
-
-        setActiveObservationIds([
-          normalizedObservation.id,
-        ]);
-
-        setActiveResult(
-          null
-        );
-
-        setSelectedRegionId(
-          null
-        );
-
-        setActiveView(
-          'WORKSPACE'
-        );
-
-        setIsObservationDrawerOpen(
-          false
-        );
-
-      } catch (
-      error
-      ) {
-
-        console.error(
-          'Copernicus observation ingestion failed:',
-          error
-        );
-
-        setAppError(
-          error instanceof Error
-            ? error.message
-            : 'Unable to ingest the Copernicus product.'
-        );
-      }
-    };
+    setActiveResult(null);
+    setSelectedRegionId(null);
+    setActiveView('WORKSPACE');
+  };
 
 
   // ==========================================================
@@ -1240,16 +1031,16 @@ export function App() {
 
         {activeView ===
           'WORKSPACE' && (
-
-            <div
-              className="
-              flex-1
-              flex
-              flex-col
-              overflow-y-auto
-              min-h-0
-            "
-            >
+            <ErrorBoundary fallbackTitle="Workspace Initialization Error">
+              <div
+                className="
+                flex-1
+                flex
+                flex-col
+                overflow-y-auto
+                min-h-0
+              "
+              >
 
               {/* ==================================================
                 APP ERROR
@@ -1599,14 +1390,8 @@ export function App() {
                           handleAddObservation
                         }
 
-                        onAddObservationFromProduct={
-                          handleAddObservationFromProduct
-                        }
-
-                        onOpenSearchModal={() =>
-                          setIsSearchModalOpen(
-                            true
-                          )
+                        onObservationAdded={
+                          handleSIHObservationLoaded
                         }
 
                         onSelectDemoScenario={
@@ -1676,7 +1461,8 @@ export function App() {
                   />
                 )}
 
-            </div>
+              </div>
+            </ErrorBoundary>
           )}
 
 
@@ -1786,29 +1572,7 @@ export function App() {
       )}
 
 
-      {/* ====================================================
-          CDSE SEARCH
-      ==================================================== */}
 
-      <SatelliteSearchModal
-        isOpen={
-          isSearchModalOpen
-        }
-
-        onClose={() =>
-          setIsSearchModalOpen(
-            false
-          )
-        }
-
-        onAddObservation={
-          handleAddObservation
-        }
-
-        onAddProductAsObservation={
-          handleAddObservationFromProduct
-        }
-      />
 
 
       {/* ====================================================

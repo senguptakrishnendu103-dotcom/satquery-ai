@@ -38,6 +38,8 @@ from typing import (
 
 from PIL import Image
 
+from app.utils.isro_adapter import ISROProductAdapter
+
 
 class MetadataExtractor:
     """
@@ -251,6 +253,36 @@ class MetadataExtractor:
                 metadata.update(
                     image_metadata
                 )
+
+            # ----------------------------------------------------
+            # ISRO / SAC Mission & Metadata Detection
+            # ----------------------------------------------------
+
+            isro_info = ISROProductAdapter.detect_isro_product(
+                file_path=file_path,
+                filename=filename,
+                dataset_tags=metadata.get("tags") or metadata.get("dataset_tags"),
+            )
+
+            if isro_info:
+                metadata["isro_metadata"] = isro_info
+                metadata["is_isro_product"] = True
+                metadata["isro_mission"] = isro_info.get("mission")
+                metadata["isro_sensor"] = isro_info.get("sensor")
+                metadata["isro_product_id"] = isro_info.get("product_id")
+                metadata["isro_provider"] = isro_info.get("provider")
+                if isro_info.get("platform"):
+                    metadata["platform"] = isro_info["platform"]
+                if isro_info.get("sensor"):
+                    metadata["sensor"] = isro_info["sensor"]
+                if isro_info.get("spatial_resolution_m"):
+                    metadata["spatial_resolution_m"] = isro_info["spatial_resolution_m"]
+                if isro_info.get("xml_metadata_path"):
+                    metadata["xml_metadata_path"] = isro_info["xml_metadata_path"]
+                if isro_info.get("acquisition_date"):
+                    metadata["isro_acquisition_date"] = isro_info["acquisition_date"]
+            else:
+                metadata["is_isro_product"] = False
 
             # ----------------------------------------------------
             # Modality
@@ -1054,6 +1086,9 @@ class MetadataExtractor:
                 explicit_sensor
             )
 
+        if metadata.get("is_isro_product") and metadata.get("isro_sensor"):
+            return str(metadata["isro_sensor"])
+
         text = (
             MetadataExtractor
             ._metadata_text(
@@ -1066,12 +1101,31 @@ class MetadataExtractor:
             filename.lower()
         )
 
+        # ISRO / SAC sensors
+        if "liss-4" in text or "liss-4" in filename_lower or "liss4" in filename_lower or "l4" in filename_lower:
+            return "LISS-4"
+        if "liss-3" in text or "liss-3" in filename_lower or "liss3" in filename_lower or "l3" in filename_lower:
+            return "LISS-3"
+        if "awifs" in text or "awifs" in filename_lower or "aw_" in filename_lower:
+            return "AWiFS"
+        if "cartosat" in filename_lower or "cartosat" in text:
+            if "pan" in filename_lower or "pan" in text:
+                return "PAN"
+            if "mx" in filename_lower or "mx" in text:
+                return "MX"
+        if "ocm" in text or "ocm" in filename_lower or "oceansat" in filename_lower:
+            return "OCM-3"
+
         if (
             "sentinel-1"
             in text
             or "sentinel-1"
             in filename_lower
             or "risat"
+            in filename_lower
+            or "eos-04"
+            in filename_lower
+            or "eos04"
             in filename_lower
         ):
             return "C-SAR"
@@ -1080,6 +1134,16 @@ class MetadataExtractor:
             "sentinel-2"
             in text
             or "sentinel-2"
+            in filename_lower
+            or "msi"
+            in text
+            or "msi"
+            in filename_lower
+            or "s2a"
+            in filename_lower
+            or "s2b"
+            in filename_lower
+            or "s2c"
             in filename_lower
         ):
             return "MSI"
@@ -1113,33 +1177,36 @@ class MetadataExtractor:
                 explicit_platform
             )
 
+        if metadata.get("is_isro_product") and metadata.get("isro_metadata", {}).get("platform"):
+            return str(metadata["isro_metadata"]["platform"])
+
         filename_upper = (
             filename.upper()
         )
 
         patterns = [
             (
-                r"\bS1A\b",
+                r"S1A",
                 "Sentinel-1A",
             ),
             (
-                r"\bS1B\b",
+                r"S1B",
                 "Sentinel-1B",
             ),
             (
-                r"\bS1C\b",
+                r"S1C",
                 "Sentinel-1C",
             ),
             (
-                r"\bS2A\b",
+                r"S2A",
                 "Sentinel-2A",
             ),
             (
-                r"\bS2B\b",
+                r"S2B",
                 "Sentinel-2B",
             ),
             (
-                r"\bS2C\b",
+                r"S2C",
                 "Sentinel-2C",
             ),
             (
@@ -1150,6 +1217,46 @@ class MetadataExtractor:
                 r"LANDSAT[-_ ]?9",
                 "Landsat 9",
             ),
+            (
+                r"RESOURCESAT[-_ ]?2A|RS2A",
+                "Resourcesat-2A",
+            ),
+            (
+                r"RESOURCESAT[-_ ]?2|RS2",
+                "Resourcesat-2",
+            ),
+            (
+                r"RESOURCESAT[-_ ]?1|RS1|IRS[-_ ]?P6",
+                "Resourcesat-1 (IRS-P6)",
+            ),
+            (
+                r"CARTOSAT[-_ ]?3|CARTO3",
+                "Cartosat-3",
+            ),
+            (
+                r"CARTOSAT[-_ ]?2|CARTO2",
+                "Cartosat-2",
+            ),
+            (
+                r"CARTOSAT[-_ ]?1|CARTO1",
+                "Cartosat-1",
+            ),
+            (
+                r"EOS[-_ ]?0?4|RISAT[-_ ]?1A",
+                "EOS-04 (RISAT-1A)",
+            ),
+            (
+                r"RISAT[-_ ]?1",
+                "RISAT-1",
+            ),
+            (
+                r"RISAT[-_ ]?2",
+                "RISAT-2",
+            ),
+            (
+                r"EOS[-_ ]?0?6|OCEANSAT[-_ ]?3",
+                "EOS-06 (Oceansat-3)",
+            ),
         ]
 
         for (
@@ -1158,7 +1265,7 @@ class MetadataExtractor:
         ) in patterns:
 
             if re.search(
-                pattern,
+                r"(?:^|[^A-Za-z0-9])(" + pattern + r")(?:[^A-Za-z0-9]|$)",
                 filename_upper,
             ):
                 return platform
@@ -1337,93 +1444,127 @@ class MetadataExtractor:
 
         # --------------------------------------------------------
         # Sentinel-2 fallback semantic map.
+        is_landsat = (
+            "landsat" in platform
+            or "landsat" in filename
+            or "oli" in sensor
+        )
+
+        # --------------------------------------------------------
+        # ISRO / SAC Mission band mapping
+        # --------------------------------------------------------
+        isro_info = metadata.get("isro_metadata")
+        if not isro_info and metadata.get("is_isro_product"):
+            isro_info = {
+                "sensor": sensor,
+                "platform": platform,
+                "mission": metadata.get("isro_mission"),
+                "modality": metadata.get("modality"),
+            }
+
+        if isro_info:
+            band_count = metadata.get("band_count")
+            if not isinstance(band_count, int):
+                band_count = len(metadata.get("bands") or []) or 1
+
+            isro_map = ISROProductAdapter.get_isro_band_map(
+                isro_info=isro_info,
+                band_count=band_count,
+            )
+            for name, indices in isro_map.items():
+                if name not in result:
+                    result[name] = indices
+                else:
+                    for idx in indices:
+                        if idx not in result[name]:
+                            result[name].append(idx)
+
+        # --------------------------------------------------------
+        # Sentinel-2 fallback semantic map.
         # --------------------------------------------------------
 
         if is_sentinel2:
-
             conventions = {
-                "blue":
-                    2,
-
-                "green":
-                    3,
-
-                "red":
-                    4,
-
-                "nir":
-                    8,
-
-                "swir1":
-                    11,
-
-                "swir2":
-                    12,
+                "blue": 2,
+                "green": 3,
+                "red": 4,
+                "nir": 8,
+                "swir1": 11,
+                "swir2": 12,
             }
 
-            band_count = metadata.get(
-                "band_count"
-            )
+            band_count = metadata.get("band_count")
 
             for name, index in conventions.items():
-
                 if (
-                    name
-                    not in result
-                    and
-                    isinstance(
-                        band_count,
-                        int,
-                    )
-                    and
-                    band_count >= index
+                    name not in result
+                    and isinstance(band_count, int)
+                    and band_count >= index
                 ):
+                    result[name] = [index]
 
-                    result[
-                        name
-                    ] = [
-                        index
-                    ]
+        # --------------------------------------------------------
+        # Landsat 8/9 fallback semantic map.
+        # --------------------------------------------------------
+
+        elif is_landsat:
+            conventions = {
+                "blue": 2,
+                "green": 3,
+                "red": 4,
+                "nir": 5,
+                "swir1": 6,
+                "swir2": 7,
+            }
+
+            band_count = metadata.get("band_count")
+
+            for name, index in conventions.items():
+                if (
+                    name not in result
+                    and isinstance(band_count, int)
+                    and band_count >= index
+                ):
+                    result[name] = [index]
+
+        # --------------------------------------------------------
+        # Standard RGB / RGB-NIR fallback when no tags matched
+        # --------------------------------------------------------
+
+        elif not result:
+            band_count = metadata.get("band_count")
+            if isinstance(band_count, int):
+                if band_count == 3:
+                    result["red"] = [1]
+                    result["green"] = [2]
+                    result["blue"] = [3]
+                elif band_count == 4:
+                    result["red"] = [1]
+                    result["green"] = [2]
+                    result["blue"] = [3]
+                    result["nir"] = [4]
+                elif band_count == 6:
+                    # Standard 6-band stacked product (B02, B03, B04, B08, B11, B12)
+                    result["blue"] = [1]
+                    result["green"] = [2]
+                    result["red"] = [3]
+                    result["nir"] = [4]
+                    result["swir1"] = [5]
+                    result["swir2"] = [6]
 
         # --------------------------------------------------------
         # Sentinel-1 fallback map.
-        #
-        # VV/VH are dependent on product layout, so only create
-        # position assumptions when the metadata clearly describes
-        # a two-polarization Sentinel-1 dataset.
         # --------------------------------------------------------
 
         if is_sentinel1:
+            band_count = metadata.get("band_count")
 
-            band_count = metadata.get(
-                "band_count"
-            )
+            if isinstance(band_count, int) and band_count >= 1:
+                if "vv" not in result:
+                    result["vv"] = [1]
 
-            if (
-                isinstance(
-                    band_count,
-                    int,
-                )
-                and band_count >= 1
-            ):
-
-                if (
-                    "vv"
-                    not in result
-                ):
-                    result[
-                        "vv"
-                    ] = [1]
-
-                if (
-                    band_count >= 2
-                    and
-                    "vh"
-                    not in result
-                ):
-                    result[
-                        "vh"
-                    ] = [2]
+                if band_count >= 2 and "vh" not in result:
+                    result["vh"] = [2]
 
         return result
 
@@ -1436,150 +1577,128 @@ class MetadataExtractor:
         text: str,
     ) -> List[str]:
 
-        text = str(
-            text or ""
-        ).lower()
+        text = str(text or "").lower()
 
-        names: List[
-            str
-        ] = []
+        names: List[str] = []
 
-        # Blue
+        # ISRO LISS / AWiFS / Cartosat explicit band naming
+        if re.search(r"\b(l[34]|aw|liss[34]|awifs)[-_ ]?band[-_ ]?2\b", text):
+            names.append("green")
+        elif re.search(r"\b(l[34]|aw|liss[34]|awifs)[-_ ]?band[-_ ]?3\b", text):
+            names.append("red")
+        elif re.search(r"\b(l[34]|aw|liss[34]|awifs)[-_ ]?band[-_ ]?4\b", text):
+            names.append("nir")
+        elif re.search(r"\b(l3|aw|liss3|awifs)[-_ ]?band[-_ ]?5\b", text):
+            names.append("swir1")
+        elif re.search(r"\bmx[-_ ]?band[-_ ]?1\b", text):
+            names.append("blue")
+        elif re.search(r"\bmx[-_ ]?band[-_ ]?2\b", text):
+            names.append("green")
+        elif re.search(r"\bmx[-_ ]?band[-_ ]?3\b", text):
+            names.append("red")
+        elif re.search(r"\bmx[-_ ]?band[-_ ]?4\b", text):
+            names.append("nir")
+        elif re.search(r"\bpan[-_ ]?band\b", text) or "panchromatic" in text:
+            names.extend(["pan", "gray", "red", "green", "blue"])
+
+        # Blue (Sentinel-2 B02/B2, Landsat B02/B2, or 'blue')
         if (
-            re.search(
-                r"\bblue\b",
-                text,
-            )
-            or re.search(
-                r"\bb0?1\b",
-                text,
-            )
+            re.search(r"\bblue\b", text)
+            or re.search(r"\bb0?2\b", text)
         ):
-            names.append(
-                "blue"
-            )
+            if "blue" not in names:
+                names.append("blue")
 
-        # Green
+        # Green (Sentinel-2 B03/B3, Landsat B03/B3, or 'green')
         if (
-            re.search(
-                r"\bgreen\b",
-                text,
-            )
-            or re.search(
-                r"\bb0?3\b",
-                text,
-            )
+            re.search(r"\bgreen\b", text)
+            or re.search(r"\bb0?3\b", text)
         ):
-            names.append(
-                "green"
-            )
+            if "green" not in names:
+                names.append("green")
 
-        # Red
+        # Red (Sentinel-2 B04/B4, Landsat B04/B4, or 'red')
         if (
-            re.search(
-                r"\bred\b",
-                text,
-            )
-            or re.search(
-                r"\bb0?4\b",
-                text,
-            )
+            re.search(r"\bred\b", text)
+            or re.search(r"\bb0?4\b", text)
         ):
-            names.append(
-                "red"
-            )
+            if "red" not in names:
+                names.append("red")
 
-        # NIR
+        # NIR (Sentinel-2 B08/B8/B8A, Landsat B05/B5, or 'nir')
         if (
             "nir" in text
             or "near infrared" in text
             or "near-infrared" in text
-            or re.search(
-                r"\bb0?8\b",
-                text,
-            )
+            or re.search(r"\bb0?8\b", text)
             or "b8a" in text
+            or re.search(r"\bb0?5\b", text)
         ):
-            names.append(
-                "nir"
-            )
+            if "nir" not in names:
+                names.append("nir")
 
-        # Red edge
+        # Red edge (Sentinel-2 B05, B06, B07)
         if (
             "red edge" in text
             or "red-edge" in text
+            or re.search(r"\bb0?6\b", text)
+            or re.search(r"\bb0?7\b", text)
         ):
-            names.append(
-                "red_edge"
-            )
+            if "red_edge" not in names:
+                names.append("red_edge")
 
-        # SWIR
+        # SWIR1 (Sentinel-2 B11, Landsat B06/B6)
         if (
             "swir1" in text
             or "swir 1" in text
-            or re.search(
-                r"\bb11\b",
-                text,
-            )
+            or "swir_1" in text
+            or re.search(r"\bb11\b", text)
         ):
-            names.append(
-                "swir1"
-            )
+            if "swir1" not in names:
+                names.append("swir1")
 
+        # SWIR2 (Sentinel-2 B12, Landsat B07/B7)
         if (
             "swir2" in text
             or "swir 2" in text
-            or re.search(
-                r"\bb12\b",
-                text,
-            )
+            or "swir_2" in text
+            or re.search(r"\bb12\b", text)
         ):
-            names.append(
-                "swir2"
-            )
+            if "swir2" not in names:
+                names.append("swir2")
 
-        # SAR
+        # SAR Polarizations
         if (
-            re.search(
-                r"\bvv\b",
-                text,
-            )
+            re.search(r"\bvv\b", text)
             or "sigma0 vv" in text
+            or "sigma0_vv" in text
         ):
-            names.append(
-                "vv"
-            )
+            if "vv" not in names:
+                names.append("vv")
 
         if (
-            re.search(
-                r"\bvh\b",
-                text,
-            )
+            re.search(r"\bvh\b", text)
             or "sigma0 vh" in text
+            or "sigma0_vh" in text
         ):
-            names.append(
-                "vh"
-            )
+            if "vh" not in names:
+                names.append("vh")
 
         if (
-            re.search(
-                r"\bhh\b",
-                text,
-            )
+            re.search(r"\bhh\b", text)
+            or "sigma0 hh" in text
+            or "sigma0_hh" in text
         ):
-            names.append(
-                "hh"
-            )
+            if "hh" not in names:
+                names.append("hh")
 
         if (
-            re.search(
-                r"\bhv\b",
-                text,
-            )
+            re.search(r"\bhv\b", text)
+            or "sigma0 hv" in text
+            or "sigma0_hv" in text
         ):
-            names.append(
-                "hv"
-            )
+            if "hv" not in names:
+                names.append("hv")
 
         return names
 
@@ -1597,6 +1716,11 @@ class MetadataExtractor:
 
         No year-only fallback is created.
         """
+        # --------------------------------------------------------
+        # ISRO XML / detected date
+        # --------------------------------------------------------
+        if metadata.get("isro_acquisition_date"):
+            return metadata["isro_acquisition_date"]
 
         # --------------------------------------------------------
         # Raster metadata

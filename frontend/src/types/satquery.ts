@@ -5,7 +5,7 @@
  * Shared contract between:
  *   React frontend
  *   FastAPI backend
- *   CDSE data providers
+ *   Data providers & local rasters
  *   Agent orchestrator
  *   Specialist remote-sensing models
  */
@@ -38,7 +38,9 @@ export type ActiveView =
 
 export type ObservationSourceType =
   | 'upload'
-  | 'copernicus'
+  | 'web_fetch'
+  | 'bhoonidhi'
+  | 'sih_resource'
   | 'demo'
   | 'sample'
   | 'local'
@@ -53,6 +55,50 @@ export type ObservationIngestionStatus =
   | 'ingested'
   | 'ready'
   | 'failed';
+
+export type SIHAvailability =
+  | 'AVAILABLE'
+  | 'CONFIGURED'
+  | 'NOT_CONFIGURED'
+  | 'UNAVAILABLE';
+
+export interface SIHResourceItem {
+  resource_id: string;
+  name: string;
+  resource_type: string;
+  official_reference: string;
+  description: string;
+  supported_modalities: string[];
+  supported_tasks: string[];
+  local_dataset_root?: string;
+  configuration?: Record<string, any>;
+  materialization_capability: boolean;
+  availability: SIHAvailability;
+  availability_reason: string;
+  details?: Record<string, any>;
+}
+
+export interface SIHSampleItem {
+  sample_id: string;
+  id: string;
+  dataset: string;
+  filename?: string;
+  file_path?: string;
+  labels?: string[];
+  primary_label?: string;
+  suggested_query?: string;
+  ground_truth_answer?: string;
+  caption?: string;
+  grounding_boxes?: any[];
+  change_type?: string;
+  image_t1_path?: string;
+  image_t2_path?: string;
+  mission?: string;
+  sensor?: string;
+  modality: string;
+  task_compatibility?: string[];
+  isro_metadata?: Record<string, any>;
+}
 
 
 // ============================================================
@@ -219,7 +265,6 @@ export interface Observation {
   //
   // This can be:
   //   - local/static preview
-  //   - CDSE quicklook
   //   - generated preview
   //
   // It is NOT necessarily the model input.
@@ -275,7 +320,7 @@ export interface Observation {
 
 
   // ==========================================================
-  // CDSE / PROVIDER INFORMATION
+  // METADATA / PROVIDER INFORMATION
   // ==========================================================
 
   provider?: string;

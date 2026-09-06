@@ -3,6 +3,7 @@ import io
 import logging
 import os
 import uuid
+from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
 import numpy as np
@@ -52,10 +53,6 @@ class ImageResolver:
         if local_path:
             return ImageResolver._load_local_as_rgb(local_path, obs)
 
-        if "/api/data-sources/copernicus/quicklook/" in target:
-            product_id = target.split("/quicklook/")[-1].split("?")[0].strip()
-            return ImageResolver._load_copernicus_quicklook_direct(product_id)
-
         if target.startswith("/api/"):
             target = f"http://127.0.0.1:8000{target}"
 
@@ -93,6 +90,13 @@ class ImageResolver:
         if os.path.isabs(target) and os.path.isfile(target):
             return target
 
+        if os.path.isfile(target):
+            return os.path.abspath(target)
+
+        base_joined = os.path.join(BASE_DIR, target)
+        if os.path.isfile(base_joined):
+            return base_joined
+
         clean = target.lstrip("/")
         if clean.startswith("static/"):
             path = os.path.join(STATIC_DIR, clean[len("static/"):])
@@ -121,50 +125,6 @@ class ImageResolver:
                 return img.convert("RGB")
         except Exception as exc:
             raise ValueError(f"Unable to open image asset '{path}': {exc}") from exc
-
-    @staticmethod
-    def _load_copernicus_quicklook_direct(product_id: str) -> Image.Image:
-        cache_file = os.path.join(UPLOAD_DIR, f"quicklook_{product_id}.jpg")
-        if os.path.isfile(cache_file):
-            try:
-                with Image.open(cache_file) as img:
-                    return img.convert("RGB")
-            except Exception:
-                pass
-
-        try:
-            cat_url = f"https://catalogue.dataspace.copernicus.eu/odata/v1/Products({product_id})?$expand=Assets"
-            cat_res = requests.get(cat_url, timeout=30)
-            cat_res.raise_for_status()
-            product = cat_res.json()
-
-            quicklook = None
-            for asset in product.get("Assets", []):
-                if str(asset.get("Type", "")).upper() == "QUICKLOOK":
-                    quicklook = asset
-                    break
-
-            if not quicklook:
-                raise ValueError(f"No QUICKLOOK asset available for CDSE product {product_id}.")
-
-            asset_id = quicklook.get("Id")
-            if not asset_id:
-                raise ValueError(f"QUICKLOOK asset for CDSE product {product_id} has no ID.")
-
-            img_url = f"https://catalogue.dataspace.copernicus.eu/odata/v1/Assets({asset_id})/$value"
-            img_res = requests.get(img_url, timeout=30)
-            img_res.raise_for_status()
-
-            try:
-                with open(cache_file, "wb") as f:
-                    f.write(img_res.content)
-            except Exception:
-                pass
-
-            with Image.open(io.BytesIO(img_res.content)) as img:
-                return img.convert("RGB")
-        except Exception as exc:
-            raise ValueError(f"Unable to load Copernicus quicklook directly for product {product_id}: {exc}") from exc
 
     @staticmethod
     def _load_remote_image(url: str) -> Image.Image:
@@ -232,6 +192,8 @@ class ImageResolver:
             if alias.lower() not in normalized:
                 continue
             value = normalized[alias.lower()]
+            if isinstance(value, (list, tuple)) and len(value) > 0:
+                value = value[0]
             if isinstance(value, dict):
                 value = value.get("index") or value.get("band") or value.get("band_index")
             try:
@@ -264,6 +226,33 @@ class ImageResolver:
                 ImageResolver._normalize_band(src.read(blue)),
             ], axis=-1)
             return Image.fromarray(rgb, mode="RGB")
+
+    @staticmethod
+    def ensure_displayable_preview(raster_path: str, output_dir: Optional[str] = None) -> str:
+        """
+        Ensure a browser-renderable RGB PNG preview exists for any GeoTIFF / JP2 / TIFF raster
+        and return its public URL. If already a PNG/JPEG, return its direct URL.
+        """
+        p = Path(raster_path).resolve()
+        suffix = p.suffix.lower()
+
+        if suffix in [".png", ".jpg", ".jpeg", ".webp"]:
+            return f"/static/uploads/{p.name}"
+
+        out_dir = Path(output_dir) if output_dir else Path(UPLOAD_DIR)
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        preview_name = f"{p.stem}_preview.png"
+        preview_path = out_dir / preview_name
+
+        if not preview_path.exists() or preview_path.stat().st_size == 0:
+            try:
+                rgb_img = ImageResolver._load_raster_as_rgb(str(p), {})
+                rgb_img.save(str(preview_path), format="PNG")
+            except Exception:
+                return f"/static/uploads/{p.name}"
+
+        return f"/static/uploads/{preview_name}"
 
     @staticmethod
     def save_mask_overlay(mask_arr: np.ndarray, prefix: str = "overlay") -> str:
@@ -362,50 +351,6 @@ class ImageResolver:
         }
 
     @staticmethod
-    def process_object_grounding(img: Image.Image, query: str) -> Dict[str, Any]:
-        """Heuristic grounding fallback that returns evidence, not model confidence."""
-        if not isinstance(img, Image.Image):
-            raise ValueError("Grounding requires a PIL image.")
-        if not query or not query.strip():
-            raise ValueError("Grounding requires a non-empty query.")
-
-        arr = np.asarray(img, dtype=np.float32)
-        r, g, b = arr[..., 0], arr[..., 1], arr[..., 2]
-        gray = np.mean(arr, axis=2)
-        q = query.lower()
-
-        if any(k in q for k in ("water", "river", "lake", "ocean", "sea", "reservoir")):
-            label = "Water body"
-            mask = (b > r + 15) & (b > 60)
-        elif any(k in q for k in ("ship", "vessel", "boat", "plane", "aircraft")):
-            label = "Bright target"
-            mask = gray > np.mean(gray) + 1.8 * np.std(gray)
-        elif any(k in q for k in ("building", "urban", "structure", "industrial", "panel", "solar")):
-            label = "Built infrastructure"
-            edge = np.asarray(img.convert("L").filter(ImageFilter.FIND_EDGES), dtype=np.float32)
-            mask = edge > 90
-        elif any(k in q for k in ("forest", "tree", "vegetation", "crop", "farm", "green")):
-            label = "Vegetation canopy"
-            mask = (g > r + 10) & (g > b + 5)
-        else:
-            label = "Salient high-contrast region"
-            mask = np.abs(gray - np.mean(gray)) > 1.2 * np.std(gray)
-
-        boxes = ImageResolver._grid_boxes(mask, 5, 5, 0.12)[:8]
-        for box in boxes:
-            box["label"] = label
-
-        return {
-            "target_feature": label,
-            "boxes": boxes,
-            "overlay_url": ImageResolver.save_mask_overlay(mask, "grounding_mask"),
-            "count": len(boxes),
-            "method": "heuristic_image_grounding",
-            "confidence": None,
-            "confidence_note": "Heuristic segmentation is not a calibrated grounding model.",
-        }
-
-    @staticmethod
     def process_water_detection(img: Image.Image, threshold: float = 0.15) -> Dict[str, Any]:
         """RGB water proxy. Use real Green/NIR NDWI for multispectral analysis."""
         if not isinstance(img, Image.Image):
@@ -425,7 +370,7 @@ class ImageResolver:
             "threshold": threshold,
             "overlay_url": ImageResolver.save_mask_overlay(mask, "ndwi_water"),
             "method": "rgb_ndwi_proxy",
-            "confidence": None,
+            "confidence": 0.0,
             "confidence_note": "RGB proxy; not equivalent to multispectral Green/NIR NDWI.",
         }
 
@@ -450,63 +395,7 @@ class ImageResolver:
             "threshold": threshold,
             "overlay_url": ImageResolver.save_mask_overlay(mask, "builtup_proxy"),
             "method": "rgb_builtup_texture_proxy",
-            "confidence": None,
+            "confidence": 0.0,
             "confidence_note": "RGB texture proxy; not equivalent to multispectral NDBI.",
         }
 
-    @staticmethod
-    def process_vqa_and_caption(img: Image.Image, query: str) -> Dict[str, Any]:
-        """Deterministic RGB scene statistics for non-VLM fallback paths."""
-        if not isinstance(img, Image.Image):
-            raise ValueError("VQA/captioning requires a PIL image.")
-
-        arr = np.asarray(img, dtype=np.float32)
-        h, w = arr.shape[:2]
-        r, g, b = arr[..., 0], arr[..., 1], arr[..., 2]
-        brightness, contrast = round(float(arr.mean()), 2), round(float(arr.std()), 2)
-
-        water = (b > r + 15) & (b > 50)
-        vegetation = (g > r + 10) & (g > b + 5) & ~water
-        urban = (~water) & (~vegetation) & (np.abs(r - g) < 25) & (np.abs(g - b) < 25)
-        total = float(w * h)
-
-        water_pct = round(float(water.sum() / total * 100), 2)
-        vegetation_pct = round(float(vegetation.sum() / total * 100), 2)
-        urban_pct = round(float(urban.sum() / total * 100), 2)
-        other_pct = round(max(0.0, 100.0 - water_pct - vegetation_pct - urban_pct), 2)
-
-        covers = [
-            ("Water body", water_pct),
-            ("Dense vegetation", vegetation_pct),
-            ("Urban / built-up area", urban_pct),
-            ("Bare soil / other", other_pct),
-        ]
-        covers.sort(key=lambda item: item[1], reverse=True)
-        dominant, pct = covers[0]
-        q = (query or "").lower()
-
-        if any(k in q for k in ("water", "river", "ocean", "lake")):
-            answer = f"RGB analysis estimates {water_pct}% surface-water-like pixels."
-        elif any(k in q for k in ("building", "urban", "structure")):
-            answer = f"RGB analysis estimates {urban_pct}% pixels matching the configured built-up heuristic."
-        else:
-            answer = f"The display raster is dominated by {dominant.lower()} ({pct}%)."
-
-        answer += f" Image size is {w}x{h}; mean brightness is {brightness} and contrast is {contrast}."
-
-        return {
-            "answer": answer,
-            "confidence": None,
-            "confidence_note": "Deterministic RGB heuristic; not a trained VLM/VQA model.",
-            "dimensions": f"{w}x{h}",
-            "dominant_land_cover": dominant,
-            "land_cover_distribution": {
-                "water_pct": water_pct,
-                "vegetation_pct": vegetation_pct,
-                "urban_pct": urban_pct,
-                "other_pct": other_pct,
-            },
-            "brightness": brightness,
-            "contrast": contrast,
-            "method": "deterministic_rgb_scene_statistics",
-        }

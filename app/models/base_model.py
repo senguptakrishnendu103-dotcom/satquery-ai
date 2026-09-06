@@ -322,30 +322,23 @@ class BaseRSModel(ABC):
 
         confidence = result.get(
             "confidence",
-            0.0,
+            None,
         )
 
-        try:
-            confidence = float(
-                confidence
-            )
-        except (
-            TypeError,
-            ValueError,
-        ):
-            confidence = 0.0
-
-        # Support models that accidentally return percentages.
-        if 1.0 < confidence <= 100.0:
-            confidence /= 100.0
-
-        confidence = max(
-            0.0,
-            min(
-                1.0,
-                confidence,
-            ),
-        )
+        if confidence is None:
+            normalized_confidence = None
+        else:
+            val_str = str(confidence).strip().lower()
+            if val_str in {"none", "null", "unavailable", "n/a", ""}:
+                normalized_confidence = None
+            else:
+                try:
+                    conf_float = float(confidence)
+                    if 1.0 < conf_float <= 100.0:
+                        conf_float /= 100.0
+                    normalized_confidence = max(0.0, min(1.0, conf_float))
+                except (TypeError, ValueError):
+                    normalized_confidence = None
 
         # --------------------------------------------------------------
         # Visual evidence
@@ -393,7 +386,7 @@ class BaseRSModel(ABC):
         normalized_result.update(
             {
                 "answer": answer,
-                "confidence": confidence,
+                "confidence": normalized_confidence,
                 "visual_evidence": visual_evidence,
                 "execution_details": execution_details,
             }

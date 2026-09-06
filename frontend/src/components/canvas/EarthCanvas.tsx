@@ -118,6 +118,30 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
     (region) => region.id === selectedRegionId
   );
 
+  const isOpticalSar =
+    activeObsList.some((o) => String(o.modality || '').toLowerCase() === 'sar') ||
+    resultTask.includes('sar') ||
+    resultTask.includes('cross_modal') ||
+    activeResult?.overlayType === 'sar_fusion';
+
+  const label1 = isOpticalSar
+    ? 'Optical'
+    : isChangeResult
+    ? `Before (${obsBefore?.date || 'T1'})`
+    : obsBefore?.name || 'Image 1';
+
+  const label2 = isOpticalSar
+    ? 'SAR Radar'
+    : isChangeResult
+    ? `After (${obsAfter?.date || 'T2'})`
+    : obsAfter?.name || 'Image 2';
+
+  const labelCompare = isOpticalSar
+    ? 'Fusion Overlay'
+    : isChangeResult
+    ? 'Compare Changes'
+    : 'Compare';
+
   return (
     <div className="relative flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-[#07090C] select-none">
       {/* Simple map toolbar */}
@@ -132,10 +156,7 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
                   : 'text-slate-400 hover:bg-sat-panel hover:text-slate-200'
                   }`}
               >
-                Before
-                <span className="ml-1 text-[10px] opacity-60">
-                  {obsBefore?.date || 'T1'}
-                </span>
+                {label1}
               </button>
 
               <button
@@ -145,10 +166,7 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
                   : 'text-slate-400 hover:bg-sat-panel hover:text-slate-200'
                   }`}
               >
-                After
-                <span className="ml-1 text-[10px] opacity-60">
-                  {obsAfter?.date || 'T2'}
-                </span>
+                {label2}
               </button>
 
               <button
@@ -158,13 +176,13 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
                   : 'text-slate-400 hover:bg-sat-panel hover:text-slate-200'
                   }`}
               >
-                Compare changes
+                {labelCompare}
               </button>
             </div>
           ) : (
             <div className="flex items-center gap-2 px-3 py-2 text-xs text-slate-300">
               <span className="h-2 w-2 rounded-full bg-sat-accent" />
-              <span>Your satellite image</span>
+              <span>{obsBefore?.name || 'Your satellite image'}</span>
             </div>
           )}
         </div>

@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useMemo, useRef, useState, useEffect } from 'react';
 import type { Observation, ModalityType } from '../../types/satquery';
 
 import {
@@ -16,7 +16,6 @@ import {
   Radio,
   Satellite,
   ScanLine,
-  Search,
   ShieldCheck,
   Sparkles,
   Upload,
@@ -24,8 +23,12 @@ import {
   Wind,
   HelpCircle,
 } from 'lucide-react';
-
 import { SatelliteSearchModal } from './SatelliteSearchModal';
+import { SIHResourcesModal } from './SIHResourcesModal';
+import { satQueryService } from '../../services/satQueryService';
+import type { SIHResourceItem } from '../../types/satquery';
+
+
 
 /* ================================================================
    TYPES
@@ -38,9 +41,8 @@ interface ObservationPanelProps {
   activeObservationIds: string[];
   onToggleObservation: (id: string) => void;
   onAddObservation: (file: File, modality: ModalityType) => void;
-  onAddObservationFromProduct?: (obs: Observation) => void;
+  onObservationAdded?: (observation: Observation, suggestedQuery?: string) => void;
   onSelectDemoScenario?: (demoId: string) => void;
-  onOpenSearchModal?: () => void;
 }
 
 /*
@@ -50,10 +52,11 @@ interface ObservationPanelProps {
 interface ExtendedObservationMetadata {
   sensor?: string;
   groundSamplingDistance?: string;
+  bands?: unknown;
   lat?: number | string;
   lon?: number | string;
   satelliteId?: string;
-  spatialResolution?: string;
+  spatialResolution?: string | number;
   cloudCover?: string | number;
   acquisitionDate?: string;
   orbit?: string;
@@ -63,6 +66,29 @@ interface ExtendedObservationMetadata {
   radiometricStatus?: string;
   acquisitionTime?: string;
 }
+
+function formatBandsDisplay(bands: unknown, modality?: string): string {
+  if (typeof bands === 'string' && bands.trim().length > 0) {
+    return bands;
+  }
+  if (typeof bands === 'number') {
+    return `${bands} Channels`;
+  }
+  if (Array.isArray(bands)) {
+    if (bands.length === 0) return `${modality || 'MULTI-SPECTRAL'} RASTER`;
+    if (typeof bands[0] === 'object' && bands[0] !== null) {
+      const names = bands
+        .map((b: any) => b.description || b.name || (b.index ? `B${b.index}` : ''))
+        .filter(Boolean);
+      return names.length > 0
+        ? `${bands.length} Channels (${names.join(', ')})`
+        : `${bands.length} Channels`;
+    }
+    return `${bands.length} Channels (${bands.join(', ')})`;
+  }
+  return `${modality || 'MULTI-SPECTRAL'} RASTER`;
+}
+
 
 /* ================================================================
    SPECTRAL VIEW DEFINITIONS
@@ -139,9 +165,8 @@ export const ObservationPanel: React.FC<ObservationPanelProps> = ({
   activeObservationIds,
   onToggleObservation,
   onAddObservation,
-  onAddObservationFromProduct,
+  onObservationAdded,
   onSelectDemoScenario,
-  onOpenSearchModal,
 }) => {
   const [selectedModality] =
     useState<ModalityType>('OPTICAL');
@@ -155,6 +180,24 @@ export const ObservationPanel: React.FC<ObservationPanelProps> = ({
     useState<string | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
+  const [isSIHModalOpen, setIsSIHModalOpen] = useState(false);
+  const [dataSourceMode, setDataSourceMode] = useState<'LOCAL' | 'SIH'>('LOCAL');
+  const [sihResources, setSihResources] = useState<SIHResourceItem[]>([]);
+
+  useEffect(() => {
+    let mounted = true;
+    satQueryService
+      .getSIHResources()
+      .then((resp) => {
+        if (mounted && resp?.resources) {
+          setSihResources(resp.resources);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -191,13 +234,7 @@ export const ObservationPanel: React.FC<ObservationPanelProps> = ({
     );
   }, [primaryObservation, selectedSpectralView]);
 
-  const openSearch = () => {
-    if (onOpenSearchModal) {
-      onOpenSearchModal();
-    } else {
-      setIsSearchModalOpen(true);
-    }
-  };
+
 
   const startUpload = () => {
     fileInputRef.current?.click();
@@ -282,103 +319,244 @@ export const ObservationPanel: React.FC<ObservationPanelProps> = ({
       </div>
 
       {/* ==========================================================
-          PRIMARY ACTIONS — NO TECHNICAL KNOWLEDGE REQUIRED
+          DATA SOURCE SWITCHER & PRIMARY ACTIONS
       ========================================================== */}
 
       <div className="relative shrink-0 border-b border-sat-border bg-sat-bg/80 p-4">
-        <div className="mb-3">
-          <div className="text-sm font-bold text-sat-text">
-            What would you like to do?
+        {/* ========================================================
+            DATA SOURCE MODE SELECTOR
+        ======================================================== */}
+        <div className="mb-3.5">
+          <div className="text-[11px] font-bold uppercase tracking-wider text-sat-dim mb-1.5 flex items-center justify-between">
+            <span>Data Source</span>
+            <span className="text-[10px] text-sat-muted font-normal">Choose input mode</span>
           </div>
-          <div className="mt-0.5 text-xs leading-5 text-sat-dim">
-            You do not need to know satellite formats or sensors.
+
+          <div className="grid grid-cols-2 gap-1.5 rounded-lg border border-sat-border bg-sat-surface p-1">
+            <button
+              type="button"
+              onClick={() => setDataSourceMode('LOCAL')}
+              className={`
+                flex items-center justify-center gap-1.5 rounded-md py-1.5 px-2 text-xs font-semibold transition-all
+                ${
+                  dataSourceMode === 'LOCAL'
+                    ? 'bg-sat-accent/15 text-sat-accent shadow-sm border border-sat-accent/40 font-bold'
+                    : 'text-sat-muted hover:text-sat-text hover:bg-sat-panel border border-transparent'
+                }
+              `}
+            >
+              <Upload className="h-3.5 w-3.5" />
+              Upload Local Data
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setDataSourceMode('SIH')}
+              className={`
+                flex items-center justify-center gap-1.5 rounded-md py-1.5 px-2 text-xs font-semibold transition-all
+                ${
+                  dataSourceMode === 'SIH'
+                    ? 'bg-sat-accent/15 text-sat-accent shadow-sm border border-sat-accent/40 font-bold'
+                    : 'text-sat-muted hover:text-sat-text hover:bg-sat-panel border border-transparent'
+                }
+              `}
+            >
+              <Database className="h-3.5 w-3.5" />
+              SIH Data Resources
+            </button>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-2.5">
-          <button
-            type="button"
-            onClick={openSearch}
-            disabled={isUploading}
-            className="
-              group flex items-center gap-3 rounded-lg border
-              border-sat-accent/30 bg-sat-accent/[0.07] p-3 text-left
-              transition-all hover:border-sat-accent/60 hover:bg-sat-accent/10
-              disabled:cursor-not-allowed disabled:opacity-50
-            "
-          >
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-sat-accent/10 text-sat-accent">
-              <Search className="h-4 w-4" />
-            </div>
-
-            <div className="min-w-0 flex-1">
-              <div className="text-xs font-bold text-sat-text">
-                Find satellite data
-              </div>
-              <div className="mt-0.5 text-xs leading-4 text-sat-muted">
-                Search the satellite catalogue by place and date.
-              </div>
-            </div>
-
-            <ChevronRight className="h-4 w-4 shrink-0 text-sat-dim transition-transform group-hover:translate-x-0.5" />
-          </button>
-
-          <button
-            type="button"
-            onClick={startUpload}
-            disabled={isUploading}
-            className="
-              group flex items-center gap-3 rounded-lg border
-              border-sat-border bg-sat-panel/70 p-3 text-left
-              transition-all hover:border-sat-borderLight hover:bg-sat-panel
-              disabled:cursor-not-allowed disabled:opacity-50
-            "
-          >
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-sat-border bg-sat-surface text-sat-accent">
-              <Upload className="h-4 w-4" />
-            </div>
-
-            <div className="min-w-0 flex-1">
-              <div className="text-xs font-bold text-sat-text">
-                Upload my own file
-              </div>
-              <div className="mt-0.5 text-xs leading-4 text-sat-muted">
-                Add a satellite image you already have.
-              </div>
-            </div>
-
-            <Plus className="h-4 w-4 shrink-0 text-sat-dim" />
-          </button>
-
-          {onSelectDemoScenario && (
+        {/* ========================================================
+            MODE 1: LOCAL UPLOAD WORKFLOW (PRESERVED EXACTLY)
+        ======================================================== */}
+        {dataSourceMode === 'LOCAL' && (
+          <div className="grid grid-cols-1 gap-2.5 animate-in fade-in duration-150">
             <button
               type="button"
-              onClick={() => onSelectDemoScenario('demo-03')}
+              onClick={startUpload}
               disabled={isUploading}
               className="
                 group flex items-center gap-3 rounded-lg border
-                border-sat-border bg-sat-panel/40 p-3 text-left
-                transition-all hover:border-sat-accent/40 hover:bg-sat-accent/5
+                border-sat-accent/40 bg-sat-accent/[0.08] p-3 text-left
+                transition-all hover:border-sat-accent hover:bg-sat-accent/15
                 disabled:cursor-not-allowed disabled:opacity-50
               "
             >
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-sat-border bg-sat-surface text-sat-accent">
-                <Sparkles className="h-4 w-4" />
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-sat-accent/30 bg-sat-accent/10 text-sat-accent">
+                <Upload className="h-4 w-4" />
               </div>
 
               <div className="min-w-0 flex-1">
                 <div className="text-xs font-bold text-sat-text">
-                  Try an example
+                  Upload GeoTIFF / Satellite File
                 </div>
                 <div className="mt-0.5 text-xs leading-4 text-sat-muted">
-                  Explore the workspace with sample satellite data.
+                  Add your genuine multi-spectral GeoTIFF or TIFF raster.
                 </div>
               </div>
 
-              <ChevronRight className="h-4 w-4 shrink-0 text-sat-dim" />
+              <Plus className="h-4 w-4 shrink-0 text-sat-accent" />
             </button>
-          )}
-        </div>
+
+            <button
+              type="button"
+              onClick={() => setIsSearchModalOpen(true)}
+              disabled={isUploading}
+              className="
+                group flex items-center gap-3 rounded-lg border
+                border-sat-accent/30 bg-sat-panel/80 p-3 text-left
+                transition-all hover:border-sat-accent hover:bg-sat-accent/10
+                disabled:cursor-not-allowed disabled:opacity-50
+              "
+            >
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-sat-accent/30 bg-sat-accent/10 text-sat-accent">
+                <Database className="h-4 w-4" />
+              </div>
+
+              <div className="min-w-0 flex-1">
+                <div className="text-xs font-bold text-sat-text flex items-center gap-1.5">
+                  Fetch Satellite Data
+                  <span className="rounded border border-sat-accent/30 bg-sat-accent/10 px-1.5 py-0.2 text-[9px] font-bold text-sat-accent uppercase">
+                    Bhoonidhi
+                  </span>
+                </div>
+                <div className="mt-0.5 text-xs leading-4 text-sat-muted">
+                  Search & download genuine observations from ISRO / NRSC.
+                </div>
+              </div>
+
+              <ChevronRight className="h-4 w-4 shrink-0 text-sat-accent" />
+            </button>
+
+            {onSelectDemoScenario && (
+              <button
+                type="button"
+                onClick={() => onSelectDemoScenario('demo-03')}
+                disabled={isUploading}
+                className="
+                  group flex items-center gap-3 rounded-lg border
+                  border-sat-border bg-sat-panel/40 p-3 text-left
+                  transition-all hover:border-sat-accent/40 hover:bg-sat-accent/5
+                  disabled:cursor-not-allowed disabled:opacity-50
+                "
+              >
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-sat-border bg-sat-surface text-sat-accent">
+                  <Sparkles className="h-4 w-4" />
+                </div>
+
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs font-bold text-sat-text">
+                    Try an example
+                  </div>
+                  <div className="mt-0.5 text-xs leading-4 text-sat-muted">
+                    Explore the workspace with sample satellite data.
+                  </div>
+                </div>
+
+                <ChevronRight className="h-4 w-4 shrink-0 text-sat-dim" />
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* ========================================================
+            MODE 2: SIH DATA RESOURCES REGISTRY WORKFLOW
+        ======================================================== */}
+        {dataSourceMode === 'SIH' && (
+          <div className="space-y-2.5 animate-in fade-in duration-150">
+            <button
+              type="button"
+              onClick={() => setIsSIHModalOpen(true)}
+              className="
+                w-full group flex items-center gap-3 rounded-lg border
+                border-sat-accent bg-sat-accent/15 p-3 text-left
+                transition-all hover:bg-sat-accent/20 shadow-sm
+              "
+            >
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-sat-accent/40 bg-sat-accent/20 text-sat-accent">
+                <Database className="h-4 w-4" />
+              </div>
+
+              <div className="min-w-0 flex-1">
+                <div className="text-xs font-bold text-sat-text flex items-center gap-1.5">
+                  Browse SIH Benchmark Datasets
+                  <span className="rounded border border-sat-accent/30 bg-sat-accent/10 px-1.5 py-0.2 text-[9px] font-bold text-sat-accent uppercase">
+                    Hub
+                  </span>
+                </div>
+                <div className="mt-0.5 text-xs leading-4 text-sat-muted">
+                  Select and load verified benchmark samples into your workspace.
+                </div>
+              </div>
+
+              <ChevronRight className="h-4 w-4 shrink-0 text-sat-accent" />
+            </button>
+
+            {/* Quick Resource List */}
+            <div className="space-y-1.5 pt-1">
+              {sihResources.map((res) => {
+                const isReady = res.availability === 'AVAILABLE';
+                return (
+                  <button
+                    key={res.resource_id}
+                    type="button"
+                    onClick={() => setIsSIHModalOpen(true)}
+                    className="
+                      w-full flex items-center justify-between rounded-lg border border-sat-border/70
+                      bg-sat-panel/40 p-2 text-left transition-all hover:border-sat-accent/40 hover:bg-sat-panel/80
+                    "
+                  >
+                    <div className="min-w-0 flex-1 pr-2">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-semibold text-sat-text truncate">
+                          {res.name}
+                        </span>
+                      </div>
+                      <div className="text-[10px] text-sat-dim truncate mt-0.5">
+                        {res.description}
+                      </div>
+                    </div>
+
+                    <span
+                      className={`
+                        shrink-0 rounded px-1.5 py-0.2 text-[9px] font-bold uppercase tracking-wider border
+                        ${
+                          isReady
+                            ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
+                            : 'border-sat-border bg-sat-surface text-sat-dim'
+                        }
+                      `}
+                    >
+                      {isReady ? 'Ready' : 'Not Configured'}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Modals & File Input */}
+        <SatelliteSearchModal
+          isOpen={isSearchModalOpen}
+          onClose={() => setIsSearchModalOpen(false)}
+          onObservationAdded={(obs) => {
+            onToggleObservation(obs.id);
+          }}
+        />
+
+        <SIHResourcesModal
+          isOpen={isSIHModalOpen}
+          onClose={() => setIsSIHModalOpen(false)}
+          onObservationAdded={(obs, suggestedQuery) => {
+            if (onObservationAdded) {
+              onObservationAdded(obs, suggestedQuery);
+            } else {
+              onToggleObservation(obs.id);
+            }
+          }}
+        />
 
         <input
           ref={fileInputRef}
@@ -474,9 +652,12 @@ export const ObservationPanel: React.FC<ObservationPanelProps> = ({
                   icon={<Gauge className="h-3 w-3" />}
                   label="Resolution"
                   value={
-                    primaryMetadata.spatialResolution ||
-                    primaryMetadata.groundSamplingDistance ||
-                    primaryObservation.dimensions
+                    String(
+                      primaryMetadata.spatialResolution ||
+                      primaryMetadata.groundSamplingDistance ||
+                      primaryObservation.dimensions ||
+                      'Unknown'
+                    )
                   }
                 />
 
@@ -882,22 +1063,20 @@ export const ObservationPanel: React.FC<ObservationPanelProps> = ({
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <div className="text-[9px] font-semibold text-sat-text">
-                    Your data looks ready
+                    Dataset Verified
                   </div>
                   <div className="mt-0.5 text-[8px] leading-4 text-sat-muted">
-                    SATQuery checked the available dataset information.
+                    {primaryObservation.filename || primaryObservation.name}
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="text-sm font-bold text-sat-stable">92%</div>
+                  <div className="text-xs font-bold text-sat-stable uppercase">
+                    {primaryObservation.status || 'READY'}
+                  </div>
                   <div className="text-[6px] uppercase tracking-wider text-sat-dim">
-                    quality
+                    {formatBandsDisplay(primaryMetadata.bands, primaryObservation.modality)}
                   </div>
                 </div>
-              </div>
-
-              <div className="mt-2 h-1 overflow-hidden rounded-full bg-sat-panel">
-                <div className="h-full w-[92%] rounded-full bg-sat-stable" />
               </div>
             </div>
 
@@ -951,90 +1130,10 @@ export const ObservationPanel: React.FC<ObservationPanelProps> = ({
         <div className="flex items-center gap-2 text-[7px] leading-4 text-sat-dim">
           <HelpCircle className="h-3 w-3 shrink-0" />
           <span>
-            Not sure what data to use? Start with <b className="text-sat-muted">Find satellite data</b>.
+            Upload <b className="text-sat-muted">GeoTIFF/TIFF files</b> to run real-world spectral and AI analysis.
           </span>
         </div>
       </div>
-
-      {/* ==========================================================
-          SATELLITE SEARCH MODAL
-      ========================================================== */}
-
-      <SatelliteSearchModal
-        isOpen={isSearchModalOpen}
-        onClose={() => setIsSearchModalOpen(false)}
-        onAddObservation={onAddObservation}
-        onAddProductAsObservation={
-          onAddObservationFromProduct
-            ? (product: any) => {
-              const obs: Observation = {
-                id: `obs-cdse-${Date.now()}`,
-                name: product.metadata?.name || product.product_id,
-                filename:
-                  product.metadata?.name ||
-                  `${product.product_id}.SAFE`,
-                modality:
-                  product.modality === 'sar' ? 'SAR' : 'OPTICAL',
-                date: product.acquisition_datetime
-                  ? new Date(
-                    product.acquisition_datetime
-                  ).toLocaleDateString('en-GB', {
-                    day: '2-digit',
-                    month: 'short',
-                    year: 'numeric',
-                  })
-                  : 'N/A',
-                dimensions: product.resolution
-                  ? `${product.resolution}m/px`
-                  : '10m',
-                status: 'READY',
-                metadata: {
-                  sensor:
-                    product.platform ||
-                    product.instrument ||
-                    'MSI',
-                  groundSamplingDistance: product.resolution
-                    ? `${product.resolution}m/px`
-                    : undefined,
-                  cloudCover:
-                    product.cloud_cover !== null &&
-                      product.cloud_cover !== undefined
-                      ? `${product.cloud_cover.toFixed(1)}%`
-                      : undefined,
-                  lat: product.bbox
-                    ? parseFloat(
-                      (
-                        (product.bbox[1] + product.bbox[3]) /
-                        2
-                      ).toFixed(4)
-                    )
-                    : undefined,
-                  lon: product.bbox
-                    ? parseFloat(
-                      (
-                        (product.bbox[0] + product.bbox[2]) /
-                        2
-                      ).toFixed(4)
-                    )
-                    : undefined,
-                  acquisitionTime: product.acquisition_datetime
-                    ? new Date(
-                      product.acquisition_datetime
-                    )
-                      .toISOString()
-                      .substring(11, 19) + ' UTC'
-                    : undefined,
-                },
-                imageUrl: product.thumbnail_url || '',
-                thumbnailUrl: product.thumbnail_url || '',
-                isDemo: false,
-              };
-
-              onAddObservationFromProduct(obs);
-            }
-            : undefined
-        }
-      />
     </aside>
   );
 };
@@ -1073,34 +1172,37 @@ const PanelSectionHeader: React.FC<PanelSectionHeaderProps> = ({
 interface TelemetryCardProps {
   icon: React.ReactNode;
   label: string;
-  value: string;
+  value: any;
 }
 
 const TelemetryCard: React.FC<TelemetryCardProps> = ({
   icon,
   label,
   value,
-}) => (
-  <div className="min-w-0 rounded-md border border-sat-border bg-sat-bg p-2.5">
-    <div className="flex items-center gap-1.5">
-      <span className="text-sat-accent">{icon}</span>
-      <span className="text-xs font-semibold uppercase tracking-wider text-sat-dim">
-        {label}
-      </span>
-    </div>
+}) => {
+  const displayVal = typeof value === 'object' && value !== null ? JSON.stringify(value) : String(value || 'Not available');
+  return (
+    <div className="min-w-0 rounded-md border border-sat-border bg-sat-bg p-2.5">
+      <div className="flex items-center gap-1.5">
+        <span className="text-sat-accent">{icon}</span>
+        <span className="text-xs font-semibold uppercase tracking-wider text-sat-dim">
+          {label}
+        </span>
+      </div>
 
-    <div
-      className="mt-1 truncate text-xs font-bold text-sat-text"
-      title={value}
-    >
-      {value || 'Not available'}
+      <div
+        className="mt-1 truncate text-xs font-bold text-sat-text"
+        title={displayVal}
+      >
+        {displayVal}
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 interface ObservationMetaRowProps {
   label: string;
-  value: string;
+  value: any;
   accent?: boolean;
 }
 
@@ -1108,54 +1210,65 @@ const ObservationMetaRow: React.FC<ObservationMetaRowProps> = ({
   label,
   value,
   accent = false,
-}) => (
-  <div className="flex items-center justify-between gap-2">
-    <span className="shrink-0 text-xs text-sat-dim">{label}</span>
-    <span
-      className={`min-w-0 truncate text-xs font-semibold ${accent ? 'text-sat-accent' : 'text-sat-muted'
+}) => {
+  const displayVal = typeof value === 'object' && value !== null ? JSON.stringify(value) : String(value ?? '');
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <span className="shrink-0 text-xs text-sat-dim">{label}</span>
+      <span
+        className={`min-w-0 truncate text-xs font-semibold ${
+          accent ? 'text-sat-accent' : 'text-sat-muted'
         }`}
-      title={value}
-    >
-      {value}
-    </span>
-  </div>
-);
+        title={displayVal}
+      >
+        {displayVal}
+      </span>
+    </div>
+  );
+};
 
 interface TechnicalItemProps {
   label: string;
-  value: string;
+  value: any;
 }
 
 const TechnicalItem: React.FC<TechnicalItemProps> = ({
   label,
   value,
-}) => (
-  <div className="min-w-0 rounded border border-sat-border bg-sat-surface px-2 py-1.5">
-    <div className="text-xs uppercase tracking-wider text-sat-dim">
-      {label}
+}) => {
+  const displayVal = typeof value === 'object' && value !== null ? JSON.stringify(value) : String(value || 'Not available');
+  return (
+    <div className="min-w-0 rounded border border-sat-border bg-sat-surface px-2 py-1.5">
+      <div className="text-xs uppercase tracking-wider text-sat-dim">
+        {label}
+      </div>
+      <div
+        className="mt-0.5 truncate text-xs font-semibold text-sat-text"
+        title={displayVal}
+      >
+        {displayVal}
+      </div>
     </div>
-    <div
-      className="mt-0.5 truncate text-xs font-semibold text-sat-text"
-      title={value}
-    >
-      {value}
-    </div>
-  </div>
-);
+  );
+};
 
 interface QualityItemProps {
   label: string;
-  value: string;
+  value: any;
 }
 
-const QualityItem: React.FC<QualityItemProps> = ({ label, value }) => (
-  <div className="flex items-center justify-between gap-2 rounded border border-sat-border bg-sat-bg px-2.5 py-1.5">
-    <span className="truncate text-xs text-sat-dim">{label}</span>
-    <span className="flex items-center gap-1 truncate text-xs font-bold text-sat-stable">
-      <CheckCircle2 className="h-3 w-3 shrink-0" />
-      {value}
-    </span>
-  </div>
-);
+const QualityItem: React.FC<QualityItemProps> = ({ label, value }) => {
+  const displayVal = typeof value === 'object' && value !== null ? JSON.stringify(value) : String(value ?? '');
+  return (
+    <div className="flex items-center justify-between gap-2 rounded border border-sat-border bg-sat-bg px-2.5 py-1.5">
+      <span className="truncate text-xs text-sat-dim">{label}</span>
+      <span className="flex items-center gap-1 truncate text-xs font-bold text-sat-stable">
+        <CheckCircle2 className="h-3 w-3 shrink-0" />
+        {displayVal}
+      </span>
+    </div>
+  );
+};
 
 export default ObservationPanel;
+

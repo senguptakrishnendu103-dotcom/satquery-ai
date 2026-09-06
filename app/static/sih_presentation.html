@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SatQuery AI — SIH 2026 Slide 2: Proposed Solution</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+    body {
+      background: #0f172a;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 24px;
+    }
+    .slide-container {
+      width: 1200px;
+      height: 675px; /* Exact 16:9 ratio */
+      background: #ffffff;
+      border-radius: 8px;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    /* Top Header */
+    .slide-header {
+      padding: 24px 36px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .team-badge {
+      border: 2.5px solid #6b21a8;
+      border-radius: 50%;
+      width: 140px;
+      height: 70px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      line-height: 1.2;
+      color: #1e293b;
+      font-weight: 700;
+      font-size: 15px;
+      background: #faf5ff;
+    }
+    .idea-title {
+      font-size: 26px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      color: #0f172a;
+      text-align: center;
+      text-transform: uppercase;
+      font-family: Georgia, serif;
+    }
+    .sih-logo-area {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .brain-icon {
+      width: 44px;
+      height: 52px;
+    }
+    .sih-text {
+      text-align: left;
+      line-height: 1.15;
+    }
+    .sih-text .title {
+      font-size: 14px;
+      font-weight: 800;
+      color: #334155;
+      letter-spacing: 0.5px;
+    }
+    .sih-text .year {
+      font-size: 19px;
+      font-weight: 900;
+      color: #0284c7;
+    }
+
+    /* Section Heading */
+    .section-title {
+      padding: 0 36px 16px;
+      color: #0369a1;
+      font-size: 24px;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* Content Cards Grid */
+    .content-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 20px;
+      padding: 0 36px;
+      flex: 1;
+    }
+    .content-card {
+      background: #f8fafc;
+      border: 1.5px solid #e2e8f0;
+      border-radius: 10px;
+      padding: 20px 18px;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+    }
+    .card-header {
+      font-size: 16px;
+      font-weight: 800;
+      color: #0f172a;
+      margin-bottom: 14px;
+      padding-bottom: 10px;
+      border-bottom: 2px solid #0284c7;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .card-header svg {
+      width: 18px;
+      height: 18px;
+      color: #0284c7;
+    }
+    .bullet-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      font-size: 13px;
+      line-height: 1.45;
+      color: #334155;
+    }
+    .bullet-item {
+      position: relative;
+      padding-left: 18px;
+    }
+    .bullet-item::before {
+      content: "•";
+      position: absolute;
+      left: 0;
+      top: -2px;
+      color: #0284c7;
+      font-size: 18px;
+      font-weight: bold;
+    }
+    .lead-text {
+      font-weight: 700;
+      color: #0f172a;
+    }
+
+    /* Footer */
+    .slide-footer {
+      background: #0284c7;
+      color: #ffffff;
+      padding: 10px 36px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 13px;
+      font-weight: 600;
+      margin-top: auto;
+    }
+    .footer-page {
+      font-size: 16px;
+      font-weight: 800;
+    }
+
+    /* Action bar */
+    .action-bar {
+      margin-top: 16px;
+      display: flex;
+      gap: 16px;
+      align-items: center;
+    }
+    .btn {
+      background: #0284c7;
+      color: white;
+      text-decoration: none;
+      padding: 10px 20px;
+      border-radius: 6px;
+      font-weight: 600;
+      font-size: 14px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: background 0.2s;
+    }
+    .btn:hover {
+      background: #0369a1;
+    }
+    .badge {
+      background: #22c55e;
+      color: white;
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="slide-container" id="sih-slide">
+    <!-- Top Bar -->
+    <div class="slide-header">
+      <div class="team-badge">
+        <span>Your Team</span>
+        <span>Name</span>
+      </div>
+
+      <div class="idea-title">
+        SATQUERY AI
+      </div>
+
+      <div class="sih-logo-area">
+        <svg class="brain-icon" viewBox="0 0 100 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <!-- Left orange half -->
+          <path d="M48 10C35 10 20 22 20 38C15 42 12 48 12 56C12 65 18 72 20 78C16 84 18 94 25 100C32 106 42 108 48 108V10Z" fill="#F97316"/>
+          <!-- Right green tech half with circuits -->
+          <path d="M52 10C65 10 80 22 80 38C85 42 88 48 88 56C88 65 82 72 80 78C84 84 82 94 75 100C68 106 58 108 52 108V10Z" fill="#10B981"/>
+          <line x1="58" y1="30" x2="72" y2="30" stroke="#ffffff" stroke-width="3"/>
+          <circle cx="74" cy="30" r="3" fill="#ffffff"/>
+          <line x1="62" y1="50" x2="78" y2="50" stroke="#ffffff" stroke-width="3"/>
+          <circle cx="80" cy="50" r="3" fill="#ffffff"/>
+          <line x1="58" y1="70" x2="70" y2="70" stroke="#ffffff" stroke-width="3"/>
+          <circle cx="72" cy="70" r="3" fill="#ffffff"/>
+          <line x1="62" y1="90" x2="74" y2="90" stroke="#ffffff" stroke-width="3"/>
+          <circle cx="76" cy="90" r="3" fill="#ffffff"/>
+        </svg>
+        <div class="sih-text">
+          <div class="title">SMART INDIA</div>
+          <div class="title">HACKATHON</div>
+          <div class="year">2026</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Section Title -->
+    <div class="section-title">
+      ❖ Proposed Solution (Describe your Idea/Solution/Prototype)
+    </div>
+
+    <!-- 3 Cards -->
+    <div class="content-grid">
+      <!-- Card 1 -->
+      <div class="content-card">
+        <div class="card-header">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+          Detailed Explanation of Solution
+        </div>
+        <ul class="bullet-list">
+          <li class="bullet-item">
+            <span class="lead-text">Agentic AI Orchestrator:</span> Directly translates natural-language queries into multi-specialist satellite analyses autonomously.
+          </li>
+          <li class="bullet-item">
+            <span class="lead-text">Native GeoTIFF Ingestion:</span> Accepts single optical/SAR, co-registered optical+SAR pairs, and bi-temporal pairs with full CRS & metadata preservation.
+          </li>
+          <li class="bullet-item">
+            <span class="lead-text">Specialist Engines:</span> Integrates adapted RS-VLM (BigEarthNet.txt fine-tuned), text-guided grounder, radiometric change detector, and radar fusion pipeline.
+          </li>
+        </ul>
+      </div>
+
+      <!-- Card 2 -->
+      <div class="content-card">
+        <div class="card-header">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          How It Addresses The Problem
+        </div>
+        <ul class="bullet-list">
+          <li class="bullet-item">
+            <span class="lead-text">Democratizes Earth Observation:</span> Non-technical users can query complex satellite rasters in plain English without manual band math or GIS software expertise.
+          </li>
+          <li class="bullet-item">
+            <span class="lead-text">Optical + SAR Synergy:</span> Combines optical spectral context (vegetation/chlorophyll) with SAR microwave backscatter for cloud-penetrating analysis.
+          </li>
+          <li class="bullet-item">
+            <span class="lead-text">Evidence-Grounded Answers:</span> Every response is strictly paired with GIS bounding boxes, segmentation masks, honest confidence, and telemetry traces.
+          </li>
+        </ul>
+      </div>
+
+      <!-- Card 3 -->
+      <div class="content-card">
+        <div class="card-header">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+          Innovation & Uniqueness
+        </div>
+        <ul class="bullet-list">
+          <li class="bullet-item">
+            <span class="lead-text">Query-Driven Agentic Routing:</span> Replaces rigid single-model scripts with a dynamic intent parser that verifies spatial overlap and modality constraints before execution.
+          </li>
+          <li class="bullet-item">
+            <span class="lead-text">Natural-Language Change VQA:</span> Translates raw radiometric difference matrices into directional, quantitative natural-language change summaries.
+          </li>
+          <li class="bullet-item">
+            <span class="lead-text">Native Satellite Radiometry:</span> Ingests calibrated radar backscatter in dB and surface reflectance rather than treating scenes as 8-bit RGB photos.
+          </li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Bottom Footer -->
+    <div class="slide-footer">
+      <div>@SIH Idea submission- Template</div>
+      <div class="footer-page">2</div>
+    </div>
+  </div>
+
+  <div class="action-bar">
+    <span class="badge">SIH26167 COMPLIANT</span>
+    <span style="color: #94a3b8; font-size: 14px;">PowerPoint file saved at: <code>d:\PROJECTS-PUPU\satquery-ai\SatQuery_AI_SIH26167_Presentation.pptx</code></span>
+  </div>
+
+</body>
+</html>

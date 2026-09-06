@@ -37,15 +37,19 @@ export const ResultPanel: React.FC<ResultPanelProps> = ({
   onFollowUpQuery,
 }) => {
   /*
-   * Clamp confidence so the visual meter can never
-   * accidentally overflow its container.
+   * Handle confidence safely: null/undefined for deterministic/uncalibrated tools.
    */
-  const confidence = Math.max(
-    0,
-    Math.min(100, Number(result.confidence) || 0)
-  );
+  const hasConfidence =
+    result.confidence !== undefined &&
+    result.confidence !== null &&
+    !isNaN(Number(result.confidence));
+
+  const confidence = hasConfidence
+    ? Math.max(0, Math.min(100, Number(result.confidence)))
+    : null;
 
   const confidenceLabel = useMemo(() => {
+    if (confidence === null) return 'N/A (DETERMINISTIC)';
     if (confidence >= 90) return 'VERY HIGH';
     if (confidence >= 75) return 'HIGH';
     if (confidence >= 60) return 'MODERATE';
@@ -70,15 +74,20 @@ export const ResultPanel: React.FC<ResultPanelProps> = ({
 
   const formattedInputs =
     (result.executionSummary?.inputs || [])
-      .map((input: any) =>
-        typeof input === 'string'
-          ? input
-          : input?.filename ||
-          input?.name ||
-          input?.product_id ||
-          input?.productId ||
-          'Unknown input'
-      )
+      .map((input: any) => {
+        if (typeof input === 'string') return input;
+        if (input && typeof input === 'object') {
+          return (
+            input.name ||
+            input.filename ||
+            input.label ||
+            input.product_id ||
+            input.productId ||
+            'Raster Dataset'
+          );
+        }
+        return 'Observation';
+      })
       .filter(Boolean)
       .join(', ') || 'N/A';
 
@@ -1440,12 +1449,14 @@ export const ResultPanel: React.FC<ResultPanelProps> = ({
                       text-sat-text
                     "
                   >
-                    {confidence}
+                    {confidence !== null ? confidence : 'N/A'}
                   </span>
 
-                  <span className="pb-0.5 font-mono text-xs text-sat-dim">
-                    /100
-                  </span>
+                  {confidence !== null && (
+                    <span className="pb-0.5 font-mono text-xs text-sat-dim">
+                      /100
+                    </span>
+                  )}
                 </div>
 
                 <div
@@ -1459,15 +1470,15 @@ export const ResultPanel: React.FC<ResultPanelProps> = ({
                   "
                 >
                   <div
-                    className="
+                    className={`
                       h-full
                       rounded-full
-                      bg-sat-stable
                       transition-all
                       duration-700
-                    "
+                      ${confidence !== null ? 'bg-sat-stable' : 'bg-sat-dim/30'}
+                    `}
                     style={{
-                      width: `${confidence}%`,
+                      width: `${confidence !== null ? confidence : 100}%`,
                     }}
                   />
                 </div>

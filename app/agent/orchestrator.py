@@ -21,9 +21,6 @@ Important
 ---------
 This module does NOT fabricate satellite observations, dates, confidence,
 answers, or evidence.
-
-A catalogue-only CDSE product is not considered model-ready.
-It must first be ingested/downloaded by the data-ingestion layer.
 """
 
 import os
@@ -1993,7 +1990,7 @@ class AgentOrchestrator:
             ._normalize_confidence(
                 model_result.get(
                     "confidence",
-                    0,
+                    None,
                 )
             )
         )
@@ -2081,35 +2078,24 @@ class AgentOrchestrator:
     @staticmethod
     def _normalize_confidence(
         value: Any,
-    ) -> float:
+    ) -> Optional[float]:
         """
         Normalize confidence to the frontend's 0-100 range.
-
-        Rules:
-            0.0 to 1.0 -> converted to percentage
-            0 to 100   -> kept as percentage
+        If confidence is None, unavailable, or invalid, return None (not 0.0 or a fabricated score).
         """
+        if value is None:
+            return None
+
+        val_str = str(value).strip().lower()
+        if val_str in {"none", "null", "unavailable", "n/a", ""}:
+            return None
 
         try:
+            confidence = float(value)
+        except (TypeError, ValueError):
+            return None
 
-            confidence = float(
-                value
-            )
-
-        except (
-            TypeError,
-            ValueError,
-        ):
-
-            return 0.0
-
-        if (
-            0.0
-            <= confidence
-            <= 1.0
-        ):
-
-            # Values like 0.87 represent 87%.
+        if 0.0 <= confidence <= 1.0:
             confidence *= 100.0
 
         confidence = max(

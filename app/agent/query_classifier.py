@@ -418,107 +418,7 @@ class QueryClassifier:
             )
 
         # ==============================================================
-        # 4. WATER DETECTION
-        #
-        # Water is checked before generic grounding/VQA so:
-        #
-        # "Highlight water bodies"
-        #
-        # routes to WATER_DETECTION rather than generic grounding.
-        # ==============================================================
-
-        water_target = self._contains_any(
-            q,
-            self.WATER_TERMS,
-        )
-
-        water_spatial_intent = (
-            self._contains_any(
-                q,
-                self.GROUNDING_TERMS,
-            )
-            or self._contains_any(
-                q,
-                (
-                    "detect",
-                    "identify",
-                    "find",
-                    "extract",
-                    "map",
-                    "delineate",
-                    "area",
-                    "extent",
-                ),
-            )
-        )
-
-        if water_target and water_spatial_intent:
-            return self._result(
-                task="WATER_DETECTION",
-                reasoning=(
-                    "Detected a water-related remote-sensing "
-                    "target with detection, extraction or "
-                    "spatial localization intent."
-                ),
-                confidence=0.95,
-                detected_intent="WATER_BODY_DETECTION",
-                target="water bodies",
-                temporal=False,
-                modalities=normalized_modalities,
-                observation_count=observation_count,
-                input_mode=mode,
-            )
-
-        # ==============================================================
-        # 5. BUILT-UP / URBAN ANALYSIS
-        # ==============================================================
-
-        builtup_target = self._contains_any(
-            q,
-            self.BUILT_UP_TERMS,
-        )
-
-        builtup_spatial_intent = (
-            self._contains_any(
-                q,
-                self.GROUNDING_TERMS,
-            )
-            or self._contains_any(
-                q,
-                (
-                    "detect",
-                    "identify",
-                    "find",
-                    "extract",
-                    "map",
-                    "delineate",
-                    "area",
-                    "extent",
-                ),
-            )
-        )
-
-        if (
-            builtup_target
-            and builtup_spatial_intent
-        ):
-            return self._result(
-                task="BUILT_UP_ANALYSIS",
-                reasoning=(
-                    "Detected a built-up, urban or "
-                    "infrastructure extraction request."
-                ),
-                confidence=0.94,
-                detected_intent="BUILT_UP_ANALYSIS",
-                target="built-up / urban regions",
-                temporal=False,
-                modalities=normalized_modalities,
-                observation_count=observation_count,
-                input_mode=mode,
-            )
-
-        # ==============================================================
-        # 6. OBJECT GROUNDING
+        # 4. OBJECT GROUNDING
         # ==============================================================
 
         if self._contains_any(
@@ -534,6 +434,106 @@ class QueryClassifier:
                 confidence=0.93,
                 detected_intent="OBJECT_GROUNDING",
                 target=self._detect_target(q),
+                temporal=False,
+                modalities=normalized_modalities,
+                observation_count=observation_count,
+                input_mode=mode,
+            )
+
+        # ==============================================================
+        # 5. WATER DETECTION
+        # ==============================================================
+
+        water_target = self._contains_any(
+            q,
+            self.WATER_TERMS,
+        )
+
+        water_spatial_intent = self._contains_any(
+            q,
+            (
+                "detect",
+                "identify",
+                "find",
+                "extract",
+                "map",
+                "delineate",
+                "area",
+                "extent",
+                "is there",
+                "are there",
+                "present",
+                "presence",
+                "calculate",
+                "measure",
+                "check",
+                "any",
+                "show",
+            ),
+        )
+
+        if water_target and water_spatial_intent:
+            return self._result(
+                task="WATER_DETECTION",
+                reasoning=(
+                    "Detected a water-related remote-sensing "
+                    "target with detection, extraction, presence or "
+                    "spatial delineation intent."
+                ),
+                confidence=0.95,
+                detected_intent="WATER_BODY_DETECTION",
+                target="water bodies",
+                temporal=False,
+                modalities=normalized_modalities,
+                observation_count=observation_count,
+                input_mode=mode,
+            )
+
+        # ==============================================================
+        # 6. BUILT-UP / URBAN ANALYSIS
+        # ==============================================================
+
+        builtup_target = self._contains_any(
+            q,
+            self.BUILT_UP_TERMS,
+        )
+
+        builtup_spatial_intent = self._contains_any(
+            q,
+            (
+                "detect",
+                "identify",
+                "find",
+                "extract",
+                "map",
+                "delineate",
+                "area",
+                "extent",
+                "is there",
+                "are there",
+                "present",
+                "presence",
+                "calculate",
+                "measure",
+                "check",
+                "any",
+                "show",
+            ),
+        )
+
+        if (
+            builtup_target
+            and builtup_spatial_intent
+        ):
+            return self._result(
+                task="BUILT_UP_ANALYSIS",
+                reasoning=(
+                    "Detected a built-up, urban or "
+                    "infrastructure extraction request."
+                ),
+                confidence=0.94,
+                detected_intent="BUILT_UP_ANALYSIS",
+                target="built-up / urban regions",
                 temporal=False,
                 modalities=normalized_modalities,
                 observation_count=observation_count,
