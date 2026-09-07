@@ -25,6 +25,7 @@ answers, or evidence.
 
 import os
 import time
+from pathlib import Path
 
 from typing import (
     Any,
@@ -36,6 +37,10 @@ from typing import (
 from app.agent.query_classifier import QueryClassifier
 from app.agent.execution_tracker import ExecutionTracker
 from app.models.registry import registry_instance
+
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+STATIC_DIR = BASE_DIR / "app" / "static"
+UPLOAD_DIR = STATIC_DIR / "uploads"
 
 
 class AgentOrchestrator:
@@ -911,15 +916,23 @@ class AgentOrchestrator:
                 image["file_path"] = str(local_path)
                 image["local_path"] = str(local_path)
             elif not os.path.isfile(str(local_path)):
-                cand = (STATIC_DIR / str(local_path).lstrip("/\\")).resolve()
+                clean_path = str(local_path).lstrip("/\\")
+                if clean_path.startswith("static/") or clean_path.startswith("static\\"):
+                    clean_path = clean_path[7:]
+                cand = (STATIC_DIR / clean_path).resolve()
                 if cand.exists() and cand.is_file():
                     image["file_path"] = str(cand)
                     image["local_path"] = str(cand)
                 else:
-                    raise ValueError(
-                        "Observation "
-                        f"{index + 1} points to a missing analysis asset: {local_path}"
-                    )
+                    cand_assets = (STATIC_DIR / "assets" / Path(str(local_path)).name).resolve()
+                    if cand_assets.exists() and cand_assets.is_file():
+                        image["file_path"] = str(cand_assets)
+                        image["local_path"] = str(cand_assets)
+                    else:
+                        raise ValueError(
+                            "Observation "
+                            f"{index + 1} points to a missing analysis asset: {local_path}"
+                        )
             else:
                 image["file_path"] = str(local_path)
                 image["local_path"] = str(local_path)

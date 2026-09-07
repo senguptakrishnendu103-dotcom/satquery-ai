@@ -62,6 +62,16 @@ export type SIHAvailability =
   | 'NOT_CONFIGURED'
   | 'UNAVAILABLE';
 
+export interface SatelliteProviderInfo {
+  id: string;
+  name: string;
+  supported_collections: string[];
+  is_configured?: boolean;
+  is_available?: boolean;
+  status?: string;
+  message?: string;
+}
+
 export interface SIHResourceItem {
   resource_id: string;
   name: string;

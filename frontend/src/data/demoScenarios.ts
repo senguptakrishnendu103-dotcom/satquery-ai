@@ -25,8 +25,8 @@ export const DEMO_SCENARIOS: DemoScenario[] = [
           groundSamplingDistance: '0.3m/px',
           acquisitionTime: '10:42:18 UTC'
         },
-        imageUrl: 'https://images.unsplash.com/photo-1541872703-74c5e44368f9?auto=format&fit=crop&w=1600&q=80',
-        thumbnailUrl: 'https://images.unsplash.com/photo-1541872703-74c5e44368f9?auto=format&fit=crop&w=300&q=80',
+        imageUrl: '/static/assets/optical_2024.png',
+        thumbnailUrl: '/static/assets/optical_2024.png',
         isDemo: true,
       }
     ],
@@ -139,8 +139,8 @@ export const DEMO_SCENARIOS: DemoScenario[] = [
           groundSamplingDistance: '10m/px',
           acquisitionTime: '18:12:04 UTC'
         },
-        imageUrl: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=1600&q=80',
-        thumbnailUrl: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=300&q=80',
+        imageUrl: '/static/assets/optical_2024.png',
+        thumbnailUrl: '/static/assets/optical_2024.png',
         isDemo: true,
       }
     ],
@@ -211,8 +211,8 @@ export const DEMO_SCENARIOS: DemoScenario[] = [
           groundSamplingDistance: '0.5m/px',
           acquisitionTime: '09:15:22 UTC'
         },
-        imageUrl: 'https://images.unsplash.com/photo-1512453979798-5ea266f8880c?auto=format&fit=crop&w=1600&q=80',
-        thumbnailUrl: 'https://images.unsplash.com/photo-1512453979798-5ea266f8880c?auto=format&fit=crop&w=300&q=80',
+        imageUrl: '/static/assets/optical_2024.png',
+        thumbnailUrl: '/static/assets/optical_2024.png',
         isDemo: true,
       },
       {
@@ -233,8 +233,8 @@ export const DEMO_SCENARIOS: DemoScenario[] = [
           groundSamplingDistance: '0.5m/px',
           acquisitionTime: '09:30:10 UTC'
         },
-        imageUrl: 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=1600&q=80',
-        thumbnailUrl: 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=300&q=80',
+        imageUrl: '/static/assets/optical_2026.png',
+        thumbnailUrl: '/static/assets/optical_2026.png',
         isDemo: true,
       }
     ],
@@ -348,8 +348,8 @@ export const DEMO_SCENARIOS: DemoScenario[] = [
           groundSamplingDistance: '10m/px',
           acquisitionTime: '11:05:00 UTC'
         },
-        imageUrl: 'https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=1600&q=80',
-        thumbnailUrl: 'https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=300&q=80',
+        imageUrl: '/static/assets/optical_multimodal.png',
+        thumbnailUrl: '/static/assets/optical_multimodal.png',
         isDemo: true,
       },
       {
@@ -370,8 +370,8 @@ export const DEMO_SCENARIOS: DemoScenario[] = [
           groundSamplingDistance: '10m/px',
           acquisitionTime: '05:40:12 UTC'
         },
-        imageUrl: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=1600&q=80',
-        thumbnailUrl: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=300&q=80',
+        imageUrl: '/static/assets/sar_multimodal.png',
+        thumbnailUrl: '/static/assets/sar_multimodal.png',
         isDemo: true,
       }
     ],

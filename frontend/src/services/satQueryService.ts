@@ -4,6 +4,7 @@ import type {
   QueryHistoryItem,
   ModalityType,
   ExecutionInput,
+  SatelliteProviderInfo,
 } from '../types/satquery';
 
 
@@ -344,7 +345,7 @@ function extractObservationSensor(
 }
 
 
-function formatBandsString(rawBands: any, fallbackModality?: string): string {
+function formatBandsString(rawBands: any, _fallbackModality?: string): string {
   if (typeof rawBands === 'string' && rawBands.trim().length > 0) {
     return rawBands;
   }
@@ -352,7 +353,7 @@ function formatBandsString(rawBands: any, fallbackModality?: string): string {
     return `${rawBands} Channels`;
   }
   if (Array.isArray(rawBands)) {
-    if (rawBands.length === 0) return `${fallbackModality || 'MULTI-SPECTRAL'} RASTER`;
+    if (rawBands.length === 0) return 'Not available';
     if (typeof rawBands[0] === 'object' && rawBands[0] !== null) {
       const descriptions = rawBands
         .map((b: any) => b.description || b.name || (b.index ? `B${b.index}` : ''))
@@ -363,7 +364,7 @@ function formatBandsString(rawBands: any, fallbackModality?: string): string {
     }
     return `${rawBands.length} Channels (${rawBands.join(', ')})`;
   }
-  return `${fallbackModality || 'MULTI-SPECTRAL'} RASTER`;
+  return 'Not available';
 }
 
 
@@ -1290,12 +1291,12 @@ export const satQueryService = {
 
 
   // ==========================================================
-  // WEB SATELLITE DATA SEARCH & FETCH (BHOONIDHI)
+  // WEB SATELLITE DATA SEARCH & FETCH
   // ==========================================================
 
-  async getSatelliteProviders(): Promise<any[]> {
+  async getSatelliteProviders(): Promise<SatelliteProviderInfo[]> {
     try {
-      const data = await fetchJson<{ providers?: any[] }>('/api/data/providers');
+      const data = await fetchJson<{ providers?: SatelliteProviderInfo[] }>('/api/data/providers');
       return Array.isArray(data.providers) ? data.providers : [];
     } catch (err) {
       console.warn('Failed to load satellite providers:', err);
@@ -1312,7 +1313,7 @@ export const satQueryService = {
     filters?: Record<string, any>;
   }): Promise<{ provider: string; total_matched: number; items: any[] }> {
     const payload = {
-      provider: params.provider || 'bhoonidhi',
+      provider: params.provider || '',
       collections: params.collections || [],
       bbox: params.bbox,
       datetime_range: params.datetimeRange,
@@ -1340,14 +1341,22 @@ export const satQueryService = {
     provider?: string;
     collection?: string;
   }): Promise<Observation> {
+    const activeProvider = params.provider || '';
     const payload = {
-      provider: params.provider || 'bhoonidhi',
+      provider: activeProvider,
       product_id: params.productId,
       collection: params.collection,
     };
 
     const resp = await fetchJson<{
       status: string;
+      download_result?: {
+        local_path?: string;
+        file_size_bytes?: number;
+        provider?: string;
+        product_id?: string;
+        collection?: string;
+      };
       observation: BackendUploadMetadata;
     }>('/api/data/download', {
       method: 'POST',
@@ -1357,48 +1366,228 @@ export const satQueryService = {
       body: JSON.stringify(payload),
     });
 
-    const realMeta = resp.observation;
-    const acquisitionDate =
-      typeof realMeta.acquisition_date === 'string' && realMeta.acquisition_date.trim()
-        ? realMeta.acquisition_date.trim()
+    const realMeta = resp.observation || ({} as BackendUploadMetadata);
+
+    // Verify local analysis asset
+    const analysisAsset =
+      (typeof realMeta.analysis_asset === 'string' && realMeta.analysis_asset.trim()) ||
+      (typeof realMeta.local_path === 'string' && realMeta.local_path.trim()) ||
+      (typeof realMeta.file_path === 'string' && realMeta.file_path.trim()) ||
+      (typeof resp.download_result?.local_path === 'string' && resp.download_result.local_path.trim()) ||
+      null;
+
+    if (!analysisAsset) {
+      throw new Error(
+        'Backend confirmed download, but did not provide a valid local analysis asset for ingestion.'
+      );
+    }
+
+    // 1. Provider, Product ID & Collection from real response
+    const providerVal =
+      (typeof realMeta.provider === 'string' && realMeta.provider.trim()) ||
+      (typeof resp.download_result?.provider === 'string' && resp.download_result.provider.trim()) ||
+      activeProvider ||
+      null;
+
+    const productIdVal =
+      (typeof realMeta.product_id === 'string' && realMeta.product_id.trim()) ||
+      (typeof realMeta.productId === 'string' && realMeta.productId.trim()) ||
+      (typeof resp.download_result?.product_id === 'string' && resp.download_result.product_id.trim()) ||
+      params.productId ||
+      null;
+
+    const collectionVal =
+      (typeof realMeta.collection === 'string' && realMeta.collection.trim()) ||
+      (typeof resp.download_result?.collection === 'string' && resp.download_result.collection.trim()) ||
+      params.collection ||
+      null;
+
+    // 2. Acquisition Date from real response
+    const rawAcqDate =
+      (typeof realMeta.acquisition_date === 'string' && realMeta.acquisition_date.trim()) ||
+      (typeof realMeta.acquisitionDate === 'string' && realMeta.acquisitionDate.trim()) ||
+      (typeof realMeta.date === 'string' && realMeta.date.trim()) ||
+      null;
+
+    const acquisitionDate = rawAcqDate ? rawAcqDate : null;
+    const dateDisplayStr = rawAcqDate
+      ? (rawAcqDate.length >= 10 ? rawAcqDate.substring(0, 10) : rawAcqDate)
+      : 'Not available';
+
+    // 3. Sensor, Platform & Instrument from real response
+    const sensorVal =
+      (typeof realMeta.sensor === 'string' && realMeta.sensor.trim()) ||
+      (typeof realMeta.instrument === 'string' && realMeta.instrument.trim()) ||
+      null;
+
+    const platformVal =
+      (typeof realMeta.platform === 'string' && realMeta.platform.trim()) ||
+      null;
+
+    const instrumentVal =
+      (typeof realMeta.instrument === 'string' && realMeta.instrument.trim()) ||
+      null;
+
+    const satelliteLabel =
+      platformVal ||
+      sensorVal ||
+      instrumentVal ||
+      collectionVal ||
+      providerVal ||
+      'Not available';
+
+    // 4. Modality from real response
+    let normalizedModality: ModalityType = 'OPTICAL';
+    if (typeof realMeta.modality === 'string') {
+      const m = realMeta.modality.toUpperCase().trim();
+      if (m === 'SAR') normalizedModality = 'SAR';
+      else if (m === 'MULTISPECTRAL') normalizedModality = 'MULTISPECTRAL';
+      else if (m === 'THERMAL') normalizedModality = 'THERMAL';
+      else if (m === 'OPTICAL') normalizedModality = 'OPTICAL';
+    }
+
+    // 5. Resolution from real response
+    const rawResNumber =
+      typeof realMeta.resolution === 'number'
+        ? realMeta.resolution
+        : typeof (realMeta as any).spatial_resolution === 'number'
+        ? (realMeta as any).spatial_resolution
+        : typeof (realMeta as any).spatial_resolution_m === 'number'
+        ? (realMeta as any).spatial_resolution_m
+        : typeof (realMeta as any).spatialResolution === 'number'
+        ? (realMeta as any).spatialResolution
+        : undefined;
+
+    const rawResStr =
+      typeof (realMeta as any).resolution === 'string' && (realMeta as any).resolution.trim()
+        ? (realMeta as any).resolution.trim()
+        : typeof (realMeta as any).spatial_resolution === 'string' && (realMeta as any).spatial_resolution.trim()
+        ? (realMeta as any).spatial_resolution.trim()
+        : typeof (realMeta as any).spatialResolution === 'string' && (realMeta as any).spatialResolution.trim()
+        ? (realMeta as any).spatialResolution.trim()
+        : undefined;
+
+    const resolutionDisplay =
+      rawResNumber !== undefined
+        ? `${rawResNumber}m`
+        : rawResStr || 'Not available';
+
+    // 6. Bands from real response
+    const bandCount =
+      Array.isArray(realMeta.bands)
+        ? realMeta.bands.length
+        : typeof realMeta.bands === 'number'
+        ? realMeta.bands
+        : typeof realMeta.band_count === 'number'
+        ? realMeta.band_count
+        : undefined;
+
+    const bandsString = formatBandsString(realMeta.bands, realMeta.modality as string | undefined);
+
+    // 7. CRS from real response
+    const crsVal =
+      (typeof realMeta.crs === 'string' && realMeta.crs.trim()) ||
+      (typeof realMeta.coordinate_system === 'string' && realMeta.coordinate_system.trim()) ||
+      (typeof realMeta.coordinateSystem === 'string' && realMeta.coordinateSystem.trim()) ||
+      null;
+
+    // 8. Bounds from real response
+    const rawBounds = realMeta.bounds || realMeta.bbox;
+    const boundsVal =
+      Array.isArray(rawBounds) && rawBounds.length === 4
+        ? (rawBounds as [number, number, number, number])
         : null;
 
+    // 9. Dimensions from real response
+    const dimensionsDisplay = formatDimensions(realMeta.dimensions as any) || 'Not available';
+
+    // 10. File Size & Cloud Cover from real response
+    const fileSizeVal =
+      (typeof realMeta.file_size === 'string' && realMeta.file_size.trim()) ||
+      (typeof realMeta.fileSize === 'string' && realMeta.fileSize.trim()) ||
+      (typeof realMeta.file_size_bytes === 'number'
+        ? `${(realMeta.file_size_bytes / (1024 * 1024)).toFixed(2)} MB`
+        : typeof resp.download_result?.file_size_bytes === 'number'
+        ? `${(resp.download_result.file_size_bytes / (1024 * 1024)).toFixed(2)} MB`
+        : null);
+
+    const cloudCoverVal =
+      realMeta.cloud_cover !== null && realMeta.cloud_cover !== undefined
+        ? `${realMeta.cloud_cover}%`
+        : realMeta.cloudCover !== null && realMeta.cloudCover !== undefined
+        ? `${realMeta.cloudCover}%`
+        : null;
+
+    const displayName =
+      (typeof realMeta.filename === 'string' && realMeta.filename.trim()) ||
+      (typeof realMeta.name === 'string' && realMeta.name.trim()) ||
+      productIdVal ||
+      'Not available';
+
     const newObs: Observation = {
-      id: realMeta.id || `obs-bhoonidhi-${Date.now()}`,
-      name: realMeta.filename || realMeta.name || params.productId,
-      filename: realMeta.filename || realMeta.name || params.productId,
-      date: acquisitionDate ? acquisitionDate.substring(0, 10) : 'Recent Pass',
-      satellite: String(realMeta.platform || realMeta.sensor || params.collection || 'ISRO Bhoonidhi'),
-      modality: (String(realMeta.modality || '').toUpperCase() === 'SAR' ? 'SAR' : 'OPTICAL') as ModalityType,
-      resolution: typeof realMeta.resolution === 'number' ? `${realMeta.resolution}m` : '5.8m',
-      bands: Array.isArray(realMeta.bands) ? realMeta.bands.length : 3,
-      imageUrl: realMeta.url || realMeta.image_url || '/static/assets/optical_2024.png',
-      thumbnailUrl: realMeta.url || realMeta.image_url || '/static/assets/optical_2024.png',
-      status: 'AVAILABLE',
+      id: (typeof realMeta.id === 'string' && realMeta.id.trim()) || `obs-${providerVal || 'download'}-${Date.now()}`,
+      name: displayName,
+      filename: displayName,
+      date: dateDisplayStr,
+      satellite: satelliteLabel,
+      modality: normalizedModality,
+      dimensions: dimensionsDisplay,
+      imageUrl: (typeof realMeta.url === 'string' && realMeta.url) || (typeof realMeta.image_url === 'string' && realMeta.image_url) || '',
+      thumbnailUrl: (typeof realMeta.url === 'string' && realMeta.url) || (typeof realMeta.image_url === 'string' && realMeta.image_url) || '',
+      status: 'READY',
       isDemo: false,
       metadata: {
         ...realMeta,
-        bands: formatBandsString(realMeta.bands, realMeta.modality || 'OPTICAL'),
-        provider: 'bhoonidhi',
-        productId: params.productId,
-        collection: params.collection,
+        provider: providerVal || undefined,
+        productId: productIdVal || undefined,
+        product_id: productIdVal || undefined,
+        collection: collectionVal || undefined,
+        sensor: sensorVal || undefined,
+        platform: platformVal || undefined,
+        instrument: instrumentVal || undefined,
+        modality: typeof realMeta.modality === 'string' ? realMeta.modality : undefined,
+        acquisitionDate: acquisitionDate,
+        acquisition_date: acquisitionDate,
+        resolution: rawResNumber,
+        spatialResolution: rawResNumber,
+        groundSamplingDistance: rawResNumber !== undefined ? `${rawResNumber}m/px` : rawResStr || 'Not available',
+        bands: bandsString !== 'Not available' ? bandsString : undefined,
+        crs: crsVal || undefined,
+        coordinateSystem: crsVal || undefined,
+        bounds: boundsVal || undefined,
+        bbox: boundsVal || undefined,
+        fileSize: fileSizeVal || undefined,
+        cloudCover: cloudCoverVal || undefined,
         sourceType: 'web_fetch',
         ingestionStatus: 'ready',
+        analysisAsset: analysisAsset,
+        analysis_asset: analysisAsset,
       },
       ...(({
-        filePath: realMeta.file_path,
-        file_path: realMeta.file_path,
-        localPath: realMeta.local_path || realMeta.file_path,
-        local_path: realMeta.local_path || realMeta.file_path,
+        filePath: analysisAsset,
+        file_path: analysisAsset,
+        localPath: analysisAsset,
+        local_path: analysisAsset,
+        analysisAsset: analysisAsset,
+        analysis_asset: analysisAsset,
         sourceType: 'web_fetch',
         source_type: 'web_fetch',
         ingestionStatus: 'ready',
         ingestion_status: 'ready',
+        provider: providerVal || undefined,
+        productId: productIdVal || undefined,
+        product_id: productIdVal || undefined,
+        collection: collectionVal || undefined,
+        sensor: sensorVal || undefined,
+        platform: platformVal || undefined,
+        instrument: instrumentVal || undefined,
         acquisitionDate: acquisitionDate,
         acquisition_date: acquisitionDate,
-        provider: 'bhoonidhi',
-        productId: params.productId,
-        product_id: params.productId,
+        crs: crsVal || undefined,
+        bounds: boundsVal || undefined,
+        bbox: boundsVal || undefined,
+        resolution: resolutionDisplay,
+        bands: bandCount,
       } as any)),
     } as Observation;
 
@@ -1487,15 +1676,15 @@ export const satQueryService = {
         date: pObs.acquisition_date ? String(pObs.acquisition_date).substring(0, 10) : 'Pre-change Pass',
         satellite: pObs.platform || pObs.sensor || 'Benchmark Reference T1',
         modality: (String(pObs.modality || '').toUpperCase() === 'SAR' ? 'SAR' : 'OPTICAL') as ModalityType,
-        resolution: pObs.resolution ? `${pObs.resolution}m` : '10m',
-        bands: Array.isArray(pObs.bands) ? pObs.bands.length : 3,
-        imageUrl: pObs.url || pObs.image_url || pObs.imageUrl,
-        thumbnailUrl: pObs.url || pObs.image_url || pObs.imageUrl,
+        resolution: pObs.resolution ? (typeof pObs.resolution === 'number' ? `${pObs.resolution}m` : String(pObs.resolution)) : 'Unknown',
+        bands: Array.isArray(pObs.bands) ? pObs.bands.length : (typeof pObs.bands === 'number' ? pObs.bands : 0),
+        imageUrl: pObs.url || pObs.image_url || pObs.imageUrl || '',
+        thumbnailUrl: pObs.url || pObs.image_url || pObs.imageUrl || '',
         status: 'AVAILABLE',
         isDemo: false,
         metadata: {
           ...pObs,
-          bands: formatBandsString(pObs.bands, pObs.modality || 'OPTICAL'),
+          bands: formatBandsString(pObs.bands, pObs.modality),
           sourceType: 'sih_resource',
           resourceId: resourceId,
           sampleId: sampleId,
@@ -1517,18 +1706,18 @@ export const satQueryService = {
         id: cObs.id || `sih_${resourceId}_${sampleId}_t2`,
         name: cObs.name || cObs.filename || `${sampleId} (T2)`,
         filename: cObs.filename || `${sampleId}_t2.tif`,
-        date: cObs.acquisition_date ? String(cObs.acquisition_date).substring(0, 10) : 'Post-change Pass',
+        date: cObs.acquisition_date ? String(cObs.acquisition_date).substring(0, 10) : (cObs.date ? String(cObs.date) : 'N/A'),
         satellite: cObs.platform || cObs.sensor || 'Benchmark Reference T2',
         modality: (String(cObs.modality || '').toUpperCase() === 'SAR' ? 'SAR' : 'OPTICAL') as ModalityType,
-        resolution: cObs.resolution ? `${cObs.resolution}m` : '10m',
-        bands: Array.isArray(cObs.bands) ? cObs.bands.length : 3,
-        imageUrl: cObs.url || cObs.image_url || cObs.imageUrl,
-        thumbnailUrl: cObs.url || cObs.image_url || cObs.imageUrl,
+        resolution: cObs.resolution ? (typeof cObs.resolution === 'number' ? `${cObs.resolution}m` : String(cObs.resolution)) : 'Unknown',
+        bands: Array.isArray(cObs.bands) ? cObs.bands.length : (typeof cObs.bands === 'number' ? cObs.bands : 0),
+        imageUrl: cObs.url || cObs.image_url || cObs.imageUrl || '',
+        thumbnailUrl: cObs.url || cObs.image_url || cObs.imageUrl || '',
         status: 'AVAILABLE',
         isDemo: false,
         metadata: {
           ...cObs,
-          bands: formatBandsString(cObs.bands, cObs.modality || 'OPTICAL'),
+          bands: formatBandsString(cObs.bands, cObs.modality),
           sourceType: 'sih_resource',
           resourceId: resourceId,
           sampleId: sampleId,
@@ -1563,18 +1752,18 @@ export const satQueryService = {
       id: realMeta.id || `sih_${resourceId}_${sampleId}`,
       name: realMeta.name || realMeta.filename || sampleId,
       filename: realMeta.filename || sampleId,
-      date: realMeta.acquisition_date ? String(realMeta.acquisition_date).substring(0, 10) : 'Benchmark Reference',
+      date: realMeta.acquisition_date ? String(realMeta.acquisition_date).substring(0, 10) : (realMeta.date ? String(realMeta.date) : 'N/A'),
       satellite: realMeta.platform || realMeta.sensor || realMeta.dataset_name || 'SIH Benchmark',
       modality: (String(realMeta.modality || '').toUpperCase() === 'SAR' ? 'SAR' : 'OPTICAL') as ModalityType,
-      resolution: typeof realMeta.resolution === 'number' ? `${realMeta.resolution}m` : '10m',
-      bands: Array.isArray(realMeta.bands) ? realMeta.bands.length : 3,
-      imageUrl: realMeta.url || realMeta.image_url || realMeta.imageUrl,
-      thumbnailUrl: realMeta.url || realMeta.image_url || realMeta.imageUrl,
+      resolution: typeof realMeta.resolution === 'number' ? `${realMeta.resolution}m` : (realMeta.resolution ? String(realMeta.resolution) : 'Unknown'),
+      bands: Array.isArray(realMeta.bands) ? realMeta.bands.length : (typeof realMeta.bands === 'number' ? realMeta.bands : 0),
+      imageUrl: realMeta.url || realMeta.image_url || realMeta.imageUrl || '',
+      thumbnailUrl: realMeta.url || realMeta.image_url || realMeta.imageUrl || '',
       status: 'AVAILABLE',
       isDemo: false,
       metadata: {
         ...realMeta,
-        bands: formatBandsString(realMeta.bands, realMeta.modality || 'OPTICAL'),
+        bands: formatBandsString(realMeta.bands, realMeta.modality),
         sourceType: 'sih_resource',
         resourceId: resourceId,
         sampleId: sampleId,

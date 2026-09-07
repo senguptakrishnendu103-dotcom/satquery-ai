@@ -27,18 +27,27 @@ def get_provider(name: str) -> SatelliteDataProvider:
 
 
 def list_providers() -> List[Dict[str, Any]]:
-    """List all registered providers and their supported collections."""
+    """List all registered providers and their supported collections with genuine availability status."""
     if "bhoonidhi" not in _PROVIDERS:
         _PROVIDERS["bhoonidhi"] = BhoonidhiProvider()
 
-    return [
-        {
+    results = []
+    for p in _PROVIDERS.values():
+        has_creds = getattr(p, "has_configured_credentials", lambda: False)()
+        results.append({
             "id": p.name,
             "name": p.display_name,
             "supported_collections": p.supported_collections,
-        }
-        for p in _PROVIDERS.values()
-    ]
+            "is_configured": bool(has_creds),
+            "is_available": bool(has_creds),
+            "status": "CONFIGURED" if has_creds else "NOT_CONFIGURED",
+            "message": (
+                "Provider is configured and ready."
+                if has_creds
+                else f"Credentials not configured on backend. Set {p.name.upper()}_USERNAME and {p.name.upper()}_PASSWORD in environment to authenticate."
+            ),
+        })
+    return results
 
 
 # Auto-register default provider

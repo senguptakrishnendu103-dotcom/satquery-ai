@@ -91,8 +91,11 @@ class BhoonidhiProvider(SatelliteDataProvider):
         return list(SUPPORTED_ISRO_COLLECTIONS)
 
     def has_configured_credentials(self) -> bool:
-        """Check if username and password or API key are provided."""
-        return bool((self._username and self._password) or self._api_key)
+        """Check if genuine username and password or API key are configured."""
+        invalid_placeholders = {"your_bhoonidhi_username", "your_bhoonidhi_password", ""}
+        user_valid = bool(self._username and self._username.strip() not in invalid_placeholders)
+        pass_valid = bool(self._password and self._password.strip() not in invalid_placeholders)
+        return bool((user_valid and pass_valid) or self._api_key)
 
     def authenticate(self, force_refresh: bool = False) -> bool:
         """

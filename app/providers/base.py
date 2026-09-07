@@ -28,11 +28,29 @@ class SearchRequest:
         if self.bbox:
             min_lon, min_lat, max_lon, max_lat = self.bbox
             if not (-180.0 <= min_lon <= 180.0 and -180.0 <= max_lon <= 180.0):
-                raise ValueError(f"Invalid longitude in bbox: {self.bbox}")
+                raise ValueError(f"Invalid longitude in bbox: {self.bbox}. Longitudes must be between -180 and 180.")
             if not (-90.0 <= min_lat <= 90.0 and -90.0 <= max_lat <= 90.0):
-                raise ValueError(f"Invalid latitude in bbox: {self.bbox}")
-            if min_lon > max_lon or min_lat > max_lat:
-                raise ValueError(f"Invalid bbox coordinates (min > max): {self.bbox}")
+                raise ValueError(f"Invalid latitude in bbox: {self.bbox}. Latitudes must be between -90 and 90.")
+            if min_lon >= max_lon:
+                raise ValueError(f"Invalid bbox coordinates: minLon ({min_lon}) must be strictly less than maxLon ({max_lon})")
+            if min_lat >= max_lat:
+                raise ValueError(f"Invalid bbox coordinates: minLat ({min_lat}) must be strictly less than maxLat ({max_lat})")
+        if self.datetime_range:
+            parts = self.datetime_range.split("/")
+            if len(parts) == 2:
+                d_from, d_to = parts[0].strip(), parts[1].strip()
+                if d_from and d_to and d_from != ".." and d_to != "..":
+                    try:
+                        dt_from = datetime.fromisoformat(d_from)
+                        dt_to = datetime.fromisoformat(d_to)
+                        if dt_from > dt_to:
+                            raise ValueError(
+                                f"Invalid date range: start date ({d_from}) must be before or equal to end date ({d_to})."
+                            )
+                    except ValueError as e:
+                        if "Invalid date range" in str(e):
+                            raise
+                        raise ValueError(f"Invalid date format in datetime_range '{self.datetime_range}': {e}")
 
 
 @dataclass

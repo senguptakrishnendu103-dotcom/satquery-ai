@@ -43,6 +43,10 @@ interface ObservationPanelProps {
   onAddObservation: (file: File, modality: ModalityType) => void;
   onObservationAdded?: (observation: Observation, suggestedQuery?: string) => void;
   onSelectDemoScenario?: (demoId: string) => void;
+  initialSearchBBox?: [number, number, number, number] | null;
+  isSearchModalOpen?: boolean;
+  onOpenSearchModal?: () => void;
+  onCloseSearchModal?: () => void;
 }
 
 /*
@@ -67,7 +71,7 @@ interface ExtendedObservationMetadata {
   acquisitionTime?: string;
 }
 
-function formatBandsDisplay(bands: unknown, modality?: string): string {
+function formatBandsDisplay(bands: unknown, _modality?: string): string {
   if (typeof bands === 'string' && bands.trim().length > 0) {
     return bands;
   }
@@ -75,7 +79,7 @@ function formatBandsDisplay(bands: unknown, modality?: string): string {
     return `${bands} Channels`;
   }
   if (Array.isArray(bands)) {
-    if (bands.length === 0) return `${modality || 'MULTI-SPECTRAL'} RASTER`;
+    if (bands.length === 0) return 'Not available';
     if (typeof bands[0] === 'object' && bands[0] !== null) {
       const names = bands
         .map((b: any) => b.description || b.name || (b.index ? `B${b.index}` : ''))
@@ -86,7 +90,7 @@ function formatBandsDisplay(bands: unknown, modality?: string): string {
     }
     return `${bands.length} Channels (${bands.join(', ')})`;
   }
-  return `${modality || 'MULTI-SPECTRAL'} RASTER`;
+  return 'Not available';
 }
 
 
@@ -167,6 +171,10 @@ export const ObservationPanel: React.FC<ObservationPanelProps> = ({
   onAddObservation,
   onObservationAdded,
   onSelectDemoScenario,
+  initialSearchBBox,
+  isSearchModalOpen: propIsSearchModalOpen,
+  onOpenSearchModal,
+  onCloseSearchModal,
 }) => {
   const [selectedModality] =
     useState<ModalityType>('OPTICAL');
@@ -179,7 +187,19 @@ export const ObservationPanel: React.FC<ObservationPanelProps> = ({
   const [expandedObservationId, setExpandedObservationId] =
     useState<string | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
+  const [internalIsSearchModalOpen, setInternalIsSearchModalOpen] = useState(false);
+  const isSearchModalOpen = propIsSearchModalOpen !== undefined ? propIsSearchModalOpen : internalIsSearchModalOpen;
+
+  const handleOpenSearchModal = () => {
+    if (onOpenSearchModal) onOpenSearchModal();
+    else setInternalIsSearchModalOpen(true);
+  };
+
+  const handleCloseSearchModal = () => {
+    if (onCloseSearchModal) onCloseSearchModal();
+    else setInternalIsSearchModalOpen(false);
+  };
+
   const [isSIHModalOpen, setIsSIHModalOpen] = useState(false);
   const [dataSourceMode, setDataSourceMode] = useState<'LOCAL' | 'SIH'>('LOCAL');
   const [sihResources, setSihResources] = useState<SIHResourceItem[]>([]);
@@ -401,7 +421,7 @@ export const ObservationPanel: React.FC<ObservationPanelProps> = ({
 
             <button
               type="button"
-              onClick={() => setIsSearchModalOpen(true)}
+              onClick={handleOpenSearchModal}
               disabled={isUploading}
               className="
                 group flex items-center gap-3 rounded-lg border
@@ -418,11 +438,11 @@ export const ObservationPanel: React.FC<ObservationPanelProps> = ({
                 <div className="text-xs font-bold text-sat-text flex items-center gap-1.5">
                   Fetch Satellite Data
                   <span className="rounded border border-sat-accent/30 bg-sat-accent/10 px-1.5 py-0.2 text-[9px] font-bold text-sat-accent uppercase">
-                    Bhoonidhi
+                    Catalogues
                   </span>
                 </div>
                 <div className="mt-0.5 text-xs leading-4 text-sat-muted">
-                  Search & download genuine observations from ISRO / NRSC.
+                  Search & download genuine observations from remote sensing providers.
                 </div>
               </div>
 
@@ -540,9 +560,14 @@ export const ObservationPanel: React.FC<ObservationPanelProps> = ({
         {/* Modals & File Input */}
         <SatelliteSearchModal
           isOpen={isSearchModalOpen}
-          onClose={() => setIsSearchModalOpen(false)}
+          onClose={handleCloseSearchModal}
+          initialBBox={initialSearchBBox}
           onObservationAdded={(obs) => {
-            onToggleObservation(obs.id);
+            if (onObservationAdded) {
+              onObservationAdded(obs);
+            } else {
+              onToggleObservation(obs.id);
+            }
           }}
         />
 
@@ -919,19 +944,30 @@ export const ObservationPanel: React.FC<ObservationPanelProps> = ({
                       </div>
 
                       <div className="mt-3 grid grid-cols-12 gap-3">
-                        <div className="col-span-4 aspect-square overflow-hidden rounded-md border border-sat-border bg-sat-bg">
+                        <div className="col-span-4 aspect-square overflow-hidden rounded-md border border-sat-border bg-sat-bg relative">
                           {obs.thumbnailUrl || obs.imageUrl ? (
                             <img
                               src={obs.thumbnailUrl || obs.imageUrl}
                               alt={`${obs.name} satellite observation`}
                               className="h-full w-full object-cover transition-transform duration-500 hover:scale-105"
                               loading="lazy"
+                              onError={(e) => {
+                                (e.currentTarget as HTMLElement).style.display = 'none';
+                                const fb = (e.currentTarget.parentNode as HTMLElement)?.querySelector('.preview-unavailable-fallback') as HTMLElement;
+                                if (fb) fb.style.display = 'flex';
+                              }}
                             />
-                          ) : (
-                            <div className="flex h-full w-full items-center justify-center">
-                              <Satellite className="h-6 w-6 text-sat-dim" />
-                            </div>
-                          )}
+                          ) : null}
+                          <div
+                            className={`preview-unavailable-fallback absolute inset-0 flex flex-col items-center justify-center p-2 text-center bg-sat-bg/90 ${
+                              obs.thumbnailUrl || obs.imageUrl ? 'hidden' : 'flex'
+                            }`}
+                          >
+                            <Satellite className="h-5 w-5 text-sat-dim/60 mb-1" />
+                            <span className="text-[9px] font-mono font-medium text-sat-dim leading-tight">
+                              Preview unavailable
+                            </span>
+                          </div>
                         </div>
 
                         <div className="col-span-8 space-y-1.5">

@@ -81,6 +81,11 @@ class ImageResolver:
 
     @staticmethod
     def _resolve_local_path(target: str) -> Optional[str]:
+        for prefix in ("http://127.0.0.1:8000/", "http://localhost:8000/", "http://127.0.0.1:5173/", "http://localhost:5173/"):
+            if target.startswith(prefix):
+                target = target[len(prefix):]
+                break
+
         if target.startswith("file:///"):
             path = target[8:].replace("/", os.sep)
             if os.name == "nt" and len(path) >= 3 and path[0] == os.sep:
@@ -101,11 +106,18 @@ class ImageResolver:
         if clean.startswith("static/"):
             path = os.path.join(STATIC_DIR, clean[len("static/"):])
             return path if os.path.isfile(path) else None
+        if clean.startswith("assets/"):
+            path = os.path.join(STATIC_DIR, clean)
+            return path if os.path.isfile(path) else None
 
         basename = os.path.basename(target)
         upload_path = os.path.join(UPLOAD_DIR, basename) if basename else ""
         if upload_path and os.path.isfile(upload_path):
             return upload_path
+
+        asset_path = os.path.join(STATIC_DIR, "assets", basename) if basename else ""
+        if asset_path and os.path.isfile(asset_path):
+            return asset_path
 
         return None
 
@@ -129,7 +141,10 @@ class ImageResolver:
     @staticmethod
     def _load_remote_image(url: str) -> Image.Image:
         try:
-            response = requests.get(url, timeout=30)
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            }
+            response = requests.get(url, headers=headers, timeout=20)
             response.raise_for_status()
             with Image.open(io.BytesIO(response.content)) as img:
                 return img.convert("RGB")

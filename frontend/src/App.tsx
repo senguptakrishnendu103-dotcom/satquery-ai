@@ -421,6 +421,15 @@ export function App() {
     false
   );
 
+  const [selectedAOI, setSelectedAOI] = useState<[number, number, number, number] | null>(null);
+  const [isSearchModalOpen, setIsSearchModalOpen] = useState<boolean>(false);
+
+  const handleOpenSatelliteSearchWithAOI = (bbox: [number, number, number, number]) => {
+    setSelectedAOI(bbox);
+    setIsObservationDrawerOpen(true);
+    setIsSearchModalOpen(true);
+  };
+
 
   // ==========================================================
   // WORKFLOW REF
@@ -1213,6 +1222,18 @@ export function App() {
                       setSelectedRegionId
                     }
 
+                    selectedAOI={
+                      selectedAOI
+                    }
+
+                    onSelectAOI={
+                      setSelectedAOI
+                    }
+
+                    onOpenSatelliteSearch={
+                      handleOpenSatelliteSearchWithAOI
+                    }
+
                     onSelectDemoScenario={
                       (
                         demoId
@@ -1392,6 +1413,22 @@ export function App() {
 
                         onObservationAdded={
                           handleSIHObservationLoaded
+                        }
+
+                        initialSearchBBox={
+                          selectedAOI
+                        }
+
+                        isSearchModalOpen={
+                          isSearchModalOpen
+                        }
+
+                        onOpenSearchModal={
+                          () => setIsSearchModalOpen(true)
+                        }
+
+                        onCloseSearchModal={
+                          () => setIsSearchModalOpen(false)
                         }
 
                         onSelectDemoScenario={

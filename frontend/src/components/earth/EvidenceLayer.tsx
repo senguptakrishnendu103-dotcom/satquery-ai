@@ -18,11 +18,16 @@ export const EvidenceLayer: React.FC<EvidenceLayerProps> = ({
   return (
     <>
       {evidence.map((region) => {
+        if (!region || !region.coords) return null;
         // Map region category to layer config IDs
         const isVisible = visibleLayers.includes(region.type) || visibleLayers.includes('change_detection') || visibleLayers.includes('base');
         if (!isVisible) return null;
 
         const isSelected = selectedRegionId === region.id;
+        const x = typeof region.coords.x === 'number' ? region.coords.x : 0;
+        const y = typeof region.coords.y === 'number' ? region.coords.y : 0;
+        const width = typeof region.coords.width === 'number' ? region.coords.width : 0;
+        const height = typeof region.coords.height === 'number' ? region.coords.height : 0;
 
         return (
           <div
@@ -37,10 +42,10 @@ export const EvidenceLayer: React.FC<EvidenceLayerProps> = ({
                 : 'border-sat-accent bg-sat-accent/15 hover:bg-sat-accent/25 hover:border-sky-300'
             }`}
             style={{
-              left: `${region.coords.x}%`,
-              top: `${region.coords.y}%`,
-              width: `${region.coords.width}%`,
-              height: `${region.coords.height}%`,
+              left: `${x}%`,
+              top: `${y}%`,
+              width: `${width}%`,
+              height: `${height}%`,
             }}
           >
             {/* Region Label Tag */}

@@ -1,4 +1,6 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
+import * as maplibregl from 'maplibre-gl';
+import 'maplibre-gl/dist/maplibre-gl.css';
 import type {
   Observation,
   AnalysisResult,
@@ -17,9 +19,15 @@ import {
   MapPin,
   Navigation,
   Radio,
+  Satellite,
   ScanLine,
   Sparkles,
   Target,
+  BoxSelect,
+  Globe,
+  Search,
+  X,
+  Maximize2,
 } from 'lucide-react';
 
 interface EarthCanvasProps {
@@ -29,9 +37,13 @@ interface EarthCanvasProps {
   selectedRegionId: string | null;
   onSelectRegion: (regionId: string | null) => void;
   onSelectDemoScenario?: (demoId: string) => void;
+  selectedAOI?: [number, number, number, number] | null;
+  onSelectAOI?: (bbox: [number, number, number, number] | null) => void;
+  onOpenSatelliteSearch?: (bbox: [number, number, number, number]) => void;
 }
 
 type CanvasOverlayMode = 'EVIDENCE' | 'HEATMAP';
+type CanvasViewMode = 'GEOGRAPHIC' | 'SCENE_INSPECT';
 
 interface CursorPosition {
   lat: string;
@@ -41,6 +53,53 @@ interface CursorPosition {
   visible: boolean;
 }
 
+const MAP_STYLE: maplibregl.StyleSpecification = {
+  version: 8,
+  sources: {
+    'carto-dark': {
+      type: 'raster',
+      tiles: [
+        'https://a.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}@2x.png',
+        'https://b.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}@2x.png',
+        'https://c.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}@2x.png',
+        'https://d.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}@2x.png',
+      ],
+      tileSize: 256,
+      attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+    },
+    'carto-labels': {
+      type: 'raster',
+      tiles: [
+        'https://a.basemaps.cartocdn.com/rastertiles/dark_only_labels/{z}/{x}/{y}@2x.png',
+        'https://b.basemaps.cartocdn.com/rastertiles/dark_only_labels/{z}/{x}/{y}@2x.png',
+        'https://c.basemaps.cartocdn.com/rastertiles/dark_only_labels/{z}/{x}/{y}@2x.png',
+        'https://d.basemaps.cartocdn.com/rastertiles/dark_only_labels/{z}/{x}/{y}@2x.png',
+      ],
+      tileSize: 256,
+      attribution: '',
+    },
+  },
+  layers: [
+    {
+      id: 'carto-dark-layer',
+      type: 'raster',
+      source: 'carto-dark',
+      minzoom: 0,
+      maxzoom: 20,
+    },
+    {
+      id: 'carto-labels-layer',
+      type: 'raster',
+      source: 'carto-labels',
+      minzoom: 0,
+      maxzoom: 20,
+      layout: {
+        visibility: 'visible',
+      },
+    },
+  ],
+};
+
 export const EarthCanvas: React.FC<EarthCanvasProps> = ({
   observations,
   activeObservationIds,
@@ -48,15 +107,26 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
   selectedRegionId,
   onSelectRegion,
   onSelectDemoScenario,
+  selectedAOI = null,
+  onSelectAOI,
+  onOpenSatelliteSearch,
 }) => {
+  const mapContainerRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<maplibregl.Map | null>(null);
+  const isMapLoadedRef = useRef(false);
+
   // ================================================================
-  // VIEWPORT
+  // VIEWPORT & VIEW MODE
   // ================================================================
 
+  const [canvasViewMode, setCanvasViewMode] = useState<CanvasViewMode>('GEOGRAPHIC');
   const [zoom, setZoom] = useState(1);
-  const [pan, setPan] = useState({ x: 0, y: 0 });
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [mapZoomLevel, setMapZoomLevel] = useState(3.5);
+  const [isAoiMode, setIsAoiMode] = useState(false);
+  const isAoiModeRef = useRef(false);
+  const [localAOI, setLocalAOI] = useState<[number, number, number, number] | null>(selectedAOI || null);
+  const isDrawingAoiRef = useRef(false);
+  const aoiStartPointRef = useRef<{ lng: number; lat: number } | null>(null);
 
   // ================================================================
   // MAP LAYERS
@@ -98,8 +168,8 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
     },
     {
       id: 'boundaries',
-      name: 'BOUNDARIES',
-      visible: false,
+      name: 'BOUNDARIES & REGIONS',
+      visible: true,
       color: '#64748B',
     },
   ]);
@@ -123,19 +193,17 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
     setCompareMode(mode);
   };
 
-  // Heatmap intensity zones: use evidence regions if available from active analysis result
   const heatmapRegions = (activeResult?.evidence && activeResult.evidence.length > 0)
     ? activeResult.evidence
     : [];
-
 
   // ================================================================
   // CURSOR / HUD
   // ================================================================
 
   const [cursorCoords, setCursorCoords] = useState<CursorPosition>({
-    lat: '22.5726° N',
-    lon: '88.3639° E',
+    lat: '20.5937° N',
+    lon: '78.9629° E',
     x: 50,
     y: 50,
     visible: false,
@@ -166,6 +234,13 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
 
   const activeObservation = obsBefore;
 
+  // Sync external selectedAOI
+  useEffect(() => {
+    if (selectedAOI) {
+      setLocalAOI(selectedAOI);
+    }
+  }, [selectedAOI]);
+
   const sceneMetadata = useMemo(() => {
     const metadata = activeObservation?.metadata;
 
@@ -189,222 +264,379 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
     };
   }, [activeObservation]);
 
+  // ================================================================
+  // MAPLIBRE INITIALIZATION & EVENT WIRING
+  // ================================================================
+
+  useEffect(() => {
+    if (!mapContainerRef.current || mapRef.current) return;
+
+    let initialCenter: [number, number] = [78.9629, 20.5937];
+    let initialZoom = 3.5;
+
+    if (activeObservation?.metadata?.lon && activeObservation?.metadata?.lat) {
+      initialCenter = [
+        Number(activeObservation.metadata.lon),
+        Number(activeObservation.metadata.lat),
+      ];
+      initialZoom = 9.5;
+    }
+
+    const map = new maplibregl.Map({
+      container: mapContainerRef.current,
+      style: MAP_STYLE,
+      center: initialCenter,
+      zoom: initialZoom,
+      attributionControl: false,
+    });
+
+    mapRef.current = map;
+
+    map.on('load', () => {
+      isMapLoadedRef.current = true;
+
+      // Add AOI Source & Layers
+      if (!map.getSource('aoi-source')) {
+        map.addSource('aoi-source', {
+          type: 'geojson',
+          data: {
+            type: 'FeatureCollection',
+            features: [],
+          },
+        });
+
+        map.addLayer({
+          id: 'aoi-fill',
+          type: 'fill',
+          source: 'aoi-source',
+          paint: {
+            'fill-color': '#0EA5E9',
+            'fill-opacity': 0.2,
+          },
+        });
+
+        map.addLayer({
+          id: 'aoi-stroke',
+          type: 'line',
+          source: 'aoi-source',
+          paint: {
+            'line-color': '#38BDF8',
+            'line-width': 2.5,
+            'line-dasharray': [3, 2],
+          },
+        });
+      }
+
+      // Add Observation Footprint Layer
+      if (!map.getSource('obs-footprint-source')) {
+        map.addSource('obs-footprint-source', {
+          type: 'geojson',
+          data: {
+            type: 'FeatureCollection',
+            features: [],
+          },
+        });
+
+        map.addLayer({
+          id: 'obs-footprint-fill',
+          type: 'fill',
+          source: 'obs-footprint-source',
+          paint: {
+            'fill-color': '#22C55E',
+            'fill-opacity': 0.15,
+          },
+        });
+
+        map.addLayer({
+          id: 'obs-footprint-stroke',
+          type: 'line',
+          source: 'obs-footprint-source',
+          paint: {
+            'line-color': '#4ADE80',
+            'line-width': 2,
+          },
+        });
+      }
+
+      // If an existing AOI is set, render it
+      if (localAOI) {
+        renderAoiBox(map, localAOI);
+      }
+    });
+
+    map.on('zoom', () => {
+      const z = map.getZoom();
+      setMapZoomLevel(z);
+      setZoom(Math.max(0.5, Math.min(3.5, Number((z / 4).toFixed(2)))));
+    });
+
+    map.on('mousemove', (e) => {
+      const lng = e.lngLat.lng;
+      const lat = e.lngLat.lat;
+
+      const latStr = `${Math.abs(lat).toFixed(4)}° ${lat >= 0 ? 'N' : 'S'}`;
+      const lonStr = `${Math.abs(lng).toFixed(4)}° ${lng >= 0 ? 'E' : 'W'}`;
+
+      setCursorCoords({
+        lat: latStr,
+        lon: lonStr,
+        x: e.point.x,
+        y: e.point.y,
+        visible: true,
+      });
+
+      // Handle AOI drawing
+      if (isDrawingAoiRef.current && aoiStartPointRef.current) {
+        const start = aoiStartPointRef.current;
+        const minLon = Math.min(start.lng, lng);
+        const maxLon = Math.max(start.lng, lng);
+        const minLat = Math.min(start.lat, lat);
+        const maxLat = Math.max(start.lat, lat);
+        renderAoiBox(map, [minLon, minLat, maxLon, maxLat]);
+      }
+    });
+
+    map.on('mousedown', (e) => {
+      if (!isAoiModeRef.current) return;
+      isDrawingAoiRef.current = true;
+      aoiStartPointRef.current = { lng: e.lngLat.lng, lat: e.lngLat.lat };
+      map.dragPan.disable();
+    });
+
+    map.on('mouseup', (e) => {
+      if (!isDrawingAoiRef.current || !aoiStartPointRef.current) return;
+      isDrawingAoiRef.current = false;
+      map.dragPan.enable();
+
+      const start = aoiStartPointRef.current;
+      const minLon = Math.min(start.lng, e.lngLat.lng);
+      const maxLon = Math.max(start.lng, e.lngLat.lng);
+      const minLat = Math.min(start.lat, e.lngLat.lat);
+      const maxLat = Math.max(start.lat, e.lngLat.lat);
+
+      if (Math.abs(maxLon - minLon) > 0.002 && Math.abs(maxLat - minLat) > 0.002) {
+        const newBbox: [number, number, number, number] = [minLon, minLat, maxLon, maxLat];
+        setLocalAOI(newBbox);
+        onSelectAOI?.(newBbox);
+        renderAoiBox(map, newBbox);
+      }
+
+      aoiStartPointRef.current = null;
+      setIsAoiMode(false);
+      isAoiModeRef.current = false;
+      map.getCanvas().style.cursor = '';
+    });
+
+    map.on('mouseout', () => {
+      setCursorCoords((prev) => ({ ...prev, visible: false }));
+    });
+
+    return () => {
+      map.remove();
+      mapRef.current = null;
+      isMapLoadedRef.current = false;
+    };
+  }, []);
+
+  // Helper to draw or clear AOI polygon on map
+  const renderAoiBox = (map: maplibregl.Map, bbox: [number, number, number, number] | null) => {
+    const source = map.getSource('aoi-source') as maplibregl.GeoJSONSource | undefined;
+    if (!source) return;
+
+    if (!bbox) {
+      source.setData({ type: 'FeatureCollection', features: [] });
+      return;
+    }
+
+    const [minLon, minLat, maxLon, maxLat] = bbox;
+    const polygonGeoJson: any = {
+      type: 'Feature',
+      properties: {},
+      geometry: {
+        type: 'Polygon',
+        coordinates: [
+          [
+            [minLon, minLat],
+            [maxLon, minLat],
+            [maxLon, maxLat],
+            [minLon, maxLat],
+            [minLon, minLat],
+          ],
+        ],
+      },
+    };
+
+    source.setData({
+      type: 'FeatureCollection',
+      features: [polygonGeoJson],
+    });
+  };
+
+  // Synchronize Country/Region Boundaries layer with LayerControl
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !map.isStyleLoaded()) return;
+
+    const isBoundariesVisible = mapLayers.find((l) => l.id === 'boundaries')?.visible ?? true;
+    if (map.getLayer('carto-labels-layer')) {
+      map.setLayoutProperty('carto-labels-layer', 'visibility', isBoundariesVisible ? 'visible' : 'none');
+    }
+  }, [mapLayers]);
+
+  // Synchronize Observation Footprint on Map
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !map.isStyleLoaded()) return;
+
+    const source = map.getSource('obs-footprint-source') as maplibregl.GeoJSONSource | undefined;
+    if (!source) return;
+
+    if (!activeObservation) {
+      source.setData({ type: 'FeatureCollection', features: [] });
+      return;
+    }
+
+    const rawBounds = activeObservation.metadata?.bounds || activeObservation.metadata?.bbox;
+    let footprintBbox: [number, number, number, number] | null = null;
+
+    if (Array.isArray(rawBounds) && rawBounds.length === 4) {
+      footprintBbox = [rawBounds[0], rawBounds[1], rawBounds[2], rawBounds[3]];
+    } else if (activeObservation.metadata?.lon && activeObservation.metadata?.lat) {
+      const cLon = Number(activeObservation.metadata.lon);
+      const cLat = Number(activeObservation.metadata.lat);
+      const delta = 0.08;
+      footprintBbox = [cLon - delta, cLat - delta, cLon + delta, cLat + delta];
+    }
+
+    if (footprintBbox) {
+      const [minLon, minLat, maxLon, maxLat] = footprintBbox;
+      source.setData({
+        type: 'FeatureCollection',
+        features: [
+          {
+            type: 'Feature',
+            properties: { title: activeObservation.name },
+            geometry: {
+              type: 'Polygon',
+              coordinates: [
+                [
+                  [minLon, minLat],
+                  [maxLon, minLat],
+                  [maxLon, maxLat],
+                  [minLon, maxLat],
+                  [minLon, minLat],
+                ],
+              ],
+            },
+          },
+        ],
+      });
+
+      map.fitBounds(
+        [
+          [minLon, minLat],
+          [maxLon, maxLat],
+        ],
+        { padding: 100, maxZoom: 12, duration: 1200 }
+      );
+    }
+  }, [activeObservation]);
+
+  // Synchronize AOI mode cursor
+  useEffect(() => {
+    isAoiModeRef.current = isAoiMode;
+    const map = mapRef.current;
+    if (!map) return;
+    if (isAoiMode) {
+      map.getCanvas().style.cursor = 'crosshair';
+      map.dragPan.disable();
+    } else {
+      map.getCanvas().style.cursor = '';
+      map.dragPan.enable();
+    }
+  }, [isAoiMode]);
 
   // ================================================================
-  // ZOOM
+  // ZOOM & CONTROL HANDLERS
   // ================================================================
 
   const handleZoomIn = () => {
-    setZoom((prev) => Math.min(prev + 0.25, 3.5));
+    mapRef.current?.zoomIn({ duration: 300 });
   };
 
   const handleZoomOut = () => {
-    setZoom((prev) => Math.max(prev - 0.25, 0.75));
+    mapRef.current?.zoomOut({ duration: 300 });
   };
 
   const handleReset = () => {
-    setZoom(1);
-    setPan({ x: 0, y: 0 });
-  };
-
-  // ================================================================
-  // LAYER
-  // ================================================================
-
-  const handleToggleLayer = (layerId: string) => {
-    setMapLayers((prev) =>
-      prev.map((layer) =>
-        layer.id === layerId
-          ? { ...layer, visible: !layer.visible }
-          : layer
-      )
-    );
-  };
-
-  // ================================================================
-  // MOUSE / CURSOR
-  // ================================================================
-
-  const handleMouseDown = (
-    e: React.MouseEvent<HTMLDivElement>
-  ) => {
-    setIsDragging(true);
-
-    setDragStart({
-      x: e.clientX - pan.x,
-      y: e.clientY - pan.y,
-    });
-  };
-
-  const handleMouseMove = (
-    e: React.MouseEvent<HTMLDivElement>
-  ) => {
-    const rect =
-      e.currentTarget.getBoundingClientRect();
-
-    const xPct =
-      (e.clientX - rect.left) / rect.width;
-
-    const yPct =
-      (e.clientY - rect.top) / rect.height;
-
-    const latBase =
-      Number(obsBefore?.metadata?.lat) || 22.5726;
-
-    const lonBase =
-      Number(obsBefore?.metadata?.lon) || 88.3639;
-
-    const currLat = (
-      latBase +
-      (0.5 - yPct) * 0.05
-    ).toFixed(4);
-
-    const currLon = (
-      lonBase +
-      (xPct - 0.5) * 0.05
-    ).toFixed(4);
-
-    setCursorCoords({
-      lat: `${Math.abs(Number(currLat))}° ${Number(currLat) >= 0 ? 'N' : 'S'
-        }`,
-      lon: `${Math.abs(Number(currLon))}° ${Number(currLon) >= 0 ? 'E' : 'W'
-        }`,
-      x: xPct * 100,
-      y: yPct * 100,
-      visible: true,
-    });
-
-    if (isDragging) {
-      setPan({
-        x: e.clientX - dragStart.x,
-        y: e.clientY - dragStart.y,
+    if (activeObservation?.metadata?.lon && activeObservation?.metadata?.lat) {
+      mapRef.current?.flyTo({
+        center: [Number(activeObservation.metadata.lon), Number(activeObservation.metadata.lat)],
+        zoom: 9.5,
+        duration: 1000,
+      });
+    } else {
+      mapRef.current?.flyTo({
+        center: [78.9629, 20.5937],
+        zoom: 3.5,
+        duration: 1000,
       });
     }
   };
 
-  const handleMouseUp = () => {
-    setIsDragging(false);
+  const handleToggleLayer = (layerId: string) => {
+    setMapLayers((prev) =>
+      prev.map((layer) =>
+        layer.id === layerId ? { ...layer, visible: !layer.visible } : layer
+      )
+    );
   };
 
-  const handleMouseLeave = () => {
-    setIsDragging(false);
-
-    setCursorCoords((prev) => ({
-      ...prev,
-      visible: false,
-    }));
+  const handleToggleAoiMode = () => {
+    setIsAoiMode((prev) => {
+      const next = !prev;
+      if (next) {
+        setCanvasViewMode('GEOGRAPHIC');
+      }
+      return next;
+    });
   };
 
-  // ================================================================
-  // SCENE LABEL
-  // ================================================================
+  const handleClearAOI = () => {
+    setLocalAOI(null);
+    onSelectAOI?.(null);
+    if (mapRef.current) {
+      renderAoiBox(mapRef.current, null);
+    }
+  };
 
   const sceneStatus = activeResult
     ? 'ANALYSIS COMPLETE'
     : hasImages
-      ? 'OBSERVATION READY'
-      : 'AWAITING OBSERVATION';
+    ? 'OBSERVATION READY'
+    : 'AWAITING OBSERVATION';
 
   return (
-    <div
-      className="
-        relative
-        flex
-        h-full
-        min-h-0
-        flex-1
-        flex-col
-        overflow-hidden
-        bg-black/30
-        backdrop-blur-sm
-        select-none
-      "
-    >
+    <div className="relative flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-black/40 backdrop-blur-sm select-none">
       {/* ==========================================================
           TOP MISSION HEADER
       ========================================================== */}
-
-      <div
-        className="
-          pointer-events-none
-          absolute
-          left-4
-          right-4
-          top-4
-          z-30
-          flex
-          flex-wrap
-          items-start
-          justify-between
-          gap-2
-        "
-      >
+      <div className="pointer-events-none absolute left-4 right-4 top-4 z-30 flex flex-wrap items-start justify-between gap-2">
         {/* LEFT: OBSERVATION TELEMETRY */}
         {hasImages && (
-          <div
-            className="
-              pointer-events-auto
-              min-w-[250px]
-              max-w-[390px]
-              overflow-hidden
-              rounded-lg
-              border
-              border-sat-border
-              bg-sat-surface/90
-              shadow-2xl
-              backdrop-blur-xl
-            "
-          >
-            <div
-              className="
-                flex
-                items-center
-                justify-between
-                border-b
-                border-sat-border
-                px-3
-                py-2
-              "
-            >
+          <div className="pointer-events-auto min-w-[250px] max-w-[390px] overflow-hidden rounded-lg border border-sat-border bg-sat-surface/90 shadow-2xl backdrop-blur-xl">
+            <div className="flex items-center justify-between border-b border-sat-border px-3 py-2">
               <div className="flex items-center gap-2">
-                <div
-                  className="
-                    flex
-                    h-6
-                    w-6
-                    items-center
-                    justify-center
-                    rounded
-                    bg-sat-accent/10
-                    text-sat-accent
-                  "
-                >
+                <div className="flex h-6 w-6 items-center justify-center rounded bg-sat-accent/10 text-sat-accent">
                   <Radio className="h-3.5 w-3.5" />
                 </div>
 
                 <div>
-                  <div
-                    className="
-                      font-mono
-                      text-[9px]
-                      font-bold
-                      uppercase
-                      tracking-wider
-                      text-sat-text
-                    "
-                  >
+                  <div className="font-mono text-[9px] font-bold uppercase tracking-wider text-sat-text">
                     Earth Observation
                   </div>
 
-                  <div
-                    className="
-                      font-mono
-                      text-[7px]
-                      uppercase
-                      tracking-wider
-                      text-sat-dim
-                    "
-                  >
+                  <div className="font-mono text-[7px] uppercase tracking-wider text-sat-dim">
                     {sceneStatus}
                   </div>
                 </div>
@@ -412,7 +644,6 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
 
               <div className="flex items-center gap-1.5">
                 <span className="h-1.5 w-1.5 rounded-full bg-sat-stable shadow-[0_0_7px_currentColor]" />
-
                 <span className="font-mono text-[7px] font-bold text-sat-stable">
                   LIVE
                 </span>
@@ -420,38 +651,13 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
             </div>
 
             <div className="grid grid-cols-4 gap-px bg-sat-border">
-              <TelemetryCell
-                label="SENSOR"
-                value={sceneMetadata.satellite}
-              />
-
-              <TelemetryCell
-                label="MODALITY"
-                value={sceneMetadata.modality}
-              />
-
-              <TelemetryCell
-                label="GSD"
-                value={sceneMetadata.resolution}
-              />
-
-              <TelemetryCell
-                label="CLOUD"
-                value={String(sceneMetadata.cloud)}
-              />
+              <TelemetryCell label="SENSOR" value={sceneMetadata.satellite} />
+              <TelemetryCell label="MODALITY" value={sceneMetadata.modality} />
+              <TelemetryCell label="GSD" value={sceneMetadata.resolution} />
+              <TelemetryCell label="CLOUD" value={String(sceneMetadata.cloud)} />
             </div>
 
-            <div
-              className="
-                flex
-                items-center
-                justify-between
-                gap-3
-                bg-sat-bg/80
-                px-3
-                py-1.5
-              "
-            >
+            <div className="flex items-center justify-between gap-3 bg-sat-bg/80 px-3 py-1.5">
               <span className="font-mono text-[7px] uppercase tracking-wider text-sat-dim">
                 ACQUIRED
               </span>
@@ -463,19 +669,51 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
           </div>
         )}
 
-        {/* RIGHT: EXISTING CONTROLS */}
+        {/* RIGHT: VIEW CONTROLS & COMPARISON */}
         <div className="flex flex-wrap items-start gap-2">
-          <div className="pointer-events-auto">
-            <ComparisonView
-              compareMode={compareMode}
-              onSetCompareMode={handleSetCompareMode}
-              wipePosition={wipePosition}
-              onWipeChange={setWipePosition}
-              dateBefore={obsBefore?.date}
-              dateAfter={obsAfter?.date}
-              isMultiObs={isMultiObs}
-            />
-          </div>
+          {hasImages && (
+            <div className="pointer-events-auto flex items-center rounded-lg border border-sat-border bg-sat-surface/90 p-1 shadow-lg backdrop-blur-md">
+              <button
+                type="button"
+                onClick={() => setCanvasViewMode('GEOGRAPHIC')}
+                className={`flex items-center gap-1.5 rounded px-2.5 py-1 font-mono text-[10px] font-bold uppercase tracking-wider transition-colors ${
+                  canvasViewMode === 'GEOGRAPHIC'
+                    ? 'bg-sat-accent text-slate-950 shadow-sm'
+                    : 'text-sat-dim hover:text-sat-text'
+                }`}
+              >
+                <Globe className="h-3.5 w-3.5" />
+                <span>Geographic Map</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setCanvasViewMode('SCENE_INSPECT')}
+                className={`flex items-center gap-1.5 rounded px-2.5 py-1 font-mono text-[10px] font-bold uppercase tracking-wider transition-colors ${
+                  canvasViewMode === 'SCENE_INSPECT'
+                    ? 'bg-sat-accent text-slate-950 shadow-sm'
+                    : 'text-sat-dim hover:text-sat-text'
+                }`}
+              >
+                <Maximize2 className="h-3.5 w-3.5" />
+                <span>Inspect Scene</span>
+              </button>
+            </div>
+          )}
+
+          {hasImages && canvasViewMode === 'SCENE_INSPECT' && (
+            <div className="pointer-events-auto">
+              <ComparisonView
+                compareMode={compareMode}
+                onSetCompareMode={handleSetCompareMode}
+                wipePosition={wipePosition}
+                onWipeChange={setWipePosition}
+                dateBefore={obsBefore?.date}
+                dateAfter={obsAfter?.date}
+                isMultiObs={isMultiObs}
+              />
+            </div>
+          )}
 
           <div className="pointer-events-auto">
             <MapControls
@@ -484,17 +722,11 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
               onZoomOut={handleZoomOut}
               onReset={handleReset}
               showGrid={showGrid}
-              onToggleGrid={() =>
-                setShowGrid((current) => !current)
-              }
+              onToggleGrid={() => setShowGrid((c) => !c)}
               showOverlays={showOverlays}
-              onToggleOverlays={() =>
-                setShowOverlays((current) => !current)
-              }
+              onToggleOverlays={() => setShowOverlays((c) => !c)}
               showLayerPanel={showLayerPanel}
-              onToggleLayerPanel={() =>
-                setShowLayerPanel((current) => !current)
-              }
+              onToggleLayerPanel={() => setShowLayerPanel((c) => !c)}
             />
           </div>
         </div>
@@ -503,7 +735,6 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
       {/* ==========================================================
           FLOATING LAYER PANEL
       ========================================================== */}
-
       {showLayerPanel && (
         <div className="absolute right-4 top-16 z-40 pointer-events-auto">
           <LayerControl
@@ -517,419 +748,153 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
       {/* ==========================================================
           LEFT MAP INSTRUMENT BAR
       ========================================================== */}
+      <div className="absolute left-4 top-1/2 z-30 -translate-y-1/2 flex flex-col overflow-hidden rounded-md border border-sat-border bg-sat-surface/90 shadow-xl backdrop-blur-xl">
+        <InstrumentButton
+          icon={<BoxSelect className="h-3.5 w-3.5" />}
+          label="AOI"
+          active={isAoiMode}
+          onClick={handleToggleAoiMode}
+        />
 
-      {hasImages && (
-        <div
-          className="
-            absolute
-            left-4
-            top-1/2
-            z-30
-            hidden
-            -translate-y-1/2
-            flex-col
-            overflow-hidden
-            rounded-md
-            border border-sat-border
-            bg-sat-surface/90
-            shadow-xl
-            backdrop-blur-xl
-            sm:flex
-          "
-        >
-          <InstrumentButton
-            icon={<Target className="h-3.5 w-3.5" />}
-            label="FOCUS"
-            onClick={() => {
-              if (selectedRegionId) {
-                return;
-              }
+        <InstrumentButton
+          icon={<Target className="h-3.5 w-3.5" />}
+          label="FOCUS"
+          onClick={() => {
+            if (activeObservation?.metadata?.lon && activeObservation?.metadata?.lat) {
+              mapRef.current?.flyTo({
+                center: [Number(activeObservation.metadata.lon), Number(activeObservation.metadata.lat)],
+                zoom: 11,
+              });
+            } else {
+              handleReset();
+            }
+          }}
+        />
 
-              setPan({ x: 0, y: 0 });
-              setZoom(1.5);
-            }}
-          />
+        <InstrumentButton
+          icon={<Navigation className="h-3.5 w-3.5" />}
+          label="RESET"
+          onClick={handleReset}
+        />
 
-          <InstrumentButton
-            icon={<Navigation className="h-3.5 w-3.5" />}
-            label="RESET"
-            onClick={handleReset}
-          />
-
-          <InstrumentButton
-            icon={<Crosshair className="h-3.5 w-3.5" />}
-            label="CENTER"
-            onClick={() =>
+        <InstrumentButton
+          icon={<Crosshair className="h-3.5 w-3.5" />}
+          label="CENTER"
+          onClick={() => {
+            if (mapRef.current) {
+              const center = mapRef.current.getCenter();
               setCursorCoords((prev) => ({
                 ...prev,
-                x: 50,
-                y: 50,
+                lat: `${Math.abs(center.lat).toFixed(4)}° ${center.lat >= 0 ? 'N' : 'S'}`,
+                lon: `${Math.abs(center.lng).toFixed(4)}° ${center.lng >= 0 ? 'E' : 'W'}`,
                 visible: true,
-              }))
+              }));
             }
-          />
+          }}
+        />
 
-          <InstrumentButton
-            icon={<Layers className="h-3.5 w-3.5" />}
-            label="LAYERS"
-            active={showLayerPanel}
-            onClick={() =>
-              setShowLayerPanel((current) => !current)
-            }
-          />
-        </div>
-      )}
+        <InstrumentButton
+          icon={<Layers className="h-3.5 w-3.5" />}
+          label="LAYERS"
+          active={showLayerPanel}
+          onClick={() => setShowLayerPanel((c) => !c)}
+        />
+      </div>
 
       {/* ==========================================================
-          CENTRAL EARTH CANVAS
+          CENTRAL MAPLIBRE GEOGRAPHIC EARTH MAP
       ========================================================== */}
+      <div className="relative flex min-h-0 flex-1 w-full items-center justify-center overflow-hidden">
+        {/* MapLibre GL Canvas Container */}
+        <div
+          ref={mapContainerRef}
+          className="absolute inset-0 h-full w-full bg-black z-0"
+        />
 
-      <div
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseLeave}
-        className={`
-          relative
-          flex
-          min-h-0
-          flex-1
-          w-full
-          items-center
-          justify-center
-          overflow-hidden
-          cursor-grab
-          ${isDragging ? 'cursor-grabbing' : ''}
-        `}
-      >
-        {/* GIS GRID */}
+        {/* GIS Grid Overlay */}
         {showGrid && (
-          <div
-            className="
-              pointer-events-none
-              absolute
-              inset-0
-              z-10
-              bg-gis-grid
-              opacity-30
-            "
-          />
+          <div className="pointer-events-none absolute inset-0 z-10 bg-gis-grid opacity-25" />
         )}
 
-        {/* MAP CROSSHAIR */}
-        {hasImages && cursorCoords.visible && (
-          <>
-            <div
-              className="
-                pointer-events-none
-                absolute
-                z-20
-                h-full
-                w-px
-                bg-sat-accent/15
-              "
-              style={{
-                left: `${cursorCoords.x}%`,
-              }}
-            />
-
-            <div
-              className="
-                pointer-events-none
-                absolute
-                z-20
-                h-px
-                w-full
-                bg-sat-accent/15
-              "
-              style={{
-                top: `${cursorCoords.y}%`,
-              }}
-            />
-
-            <div
-              className="
-                pointer-events-none
-                absolute
-                z-30
-                -translate-x-1/2
-                -translate-y-1/2
-              "
-              style={{
-                left: `${cursorCoords.x}%`,
-                top: `${cursorCoords.y}%`,
-              }}
-            >
-              <div
-                className="
-                  relative
-                  flex
-                  h-8
-                  w-8
-                  items-center
-                  justify-center
-                "
-              >
-                <div className="absolute inset-0 rounded-full border border-sat-accent/70" />
-                <div className="h-1.5 w-1.5 rounded-full bg-sat-accent shadow-[0_0_8px_currentColor]" />
-
-                <div className="absolute -top-7 left-5 whitespace-nowrap rounded border border-sat-accent/30 bg-sat-surface/90 px-2 py-1 font-mono text-[7px] text-sat-accent shadow-lg backdrop-blur">
-                  {cursorCoords.lat}
-                  {' · '}
-                  {cursorCoords.lon}
-                </div>
-              </div>
-            </div>
-          </>
-        )}
-
-        {!hasImages ? (
-          /* ========================================================
-             EMPTY STATE
-          ======================================================== */
-
-          <div
-            className="
-              relative
-              z-10
-              max-w-sm
-              space-y-4
-              rounded-lg
-              border
-              border-sat-border
-              bg-sat-surface/90
-              p-8
-              text-center
-              font-mono
-              shadow-2xl
-              backdrop-blur-xl
-            "
-          >
-            <div
-              className="
-                mx-auto
-                flex
-                h-14
-                w-14
-                items-center
-                justify-center
-                rounded-full
-                border border-sat-accent/30
-                bg-sat-accent/10
-                text-sat-accent
-              "
-            >
-              <ScanLine className="h-6 w-6" />
-            </div>
-
-            <div>
-              <h3
-                className="
-                  font-display
-                  text-sm
-                  font-bold
-                  uppercase
-                  tracking-wider
-                  text-sat-text
-                "
-              >
-                Awaiting Earth Observation
-              </h3>
-
-              <p
-                className="
-                  mt-2
-                  font-sans
-                  text-xs
-                  font-normal
-                  leading-relaxed
-                  text-sat-muted
-                "
-              >
-                Select an observation dataset from the
-                Observation Panel or load pre-processed
-                demo imagery.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-3 gap-1.5 text-left">
-              <MiniCapability
-                label="OPTICAL"
-                value="RGB / MS"
-              />
-              <MiniCapability
-                label="RADAR"
-                value="SAR"
-              />
-              <MiniCapability
-                label="TEMPORAL"
-                value="CHANGE"
-              />
-            </div>
-
-            {onSelectDemoScenario && (
-              <button
-                type="button"
-                onClick={() =>
-                  onSelectDemoScenario('demo-03')
-                }
-                className="
-                  flex
-                  w-full
-                  items-center
-                  justify-center
-                  gap-2
-                  rounded-md
-                  bg-sat-accent
-                  px-3
-                  py-2.5
-                  font-display
-                  text-xs
-                  font-semibold
-                  uppercase
-                  tracking-wider
-                  text-slate-950
-                  transition-colors
-                  hover:bg-sky-300
-                "
-              >
-                <Sparkles className="h-3.5 w-3.5" />
-                <span>LOAD DEMO OBSERVATIONS</span>
-              </button>
-            )}
+        {/* AOI Selection Hint Mode */}
+        {isAoiMode && (
+          <div className="pointer-events-none absolute top-20 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 rounded-full border border-sky-400 bg-black/80 px-4 py-1.5 font-mono text-xs font-semibold text-sky-300 shadow-2xl backdrop-blur-md animate-pulse">
+            <BoxSelect className="h-4 w-4 text-sky-400" />
+            <span>AOI DRAWING MODE: Click & drag on the map to define a bounding box</span>
           </div>
-        ) : (
-          /* ========================================================
-             IMAGE / MAP
-          ======================================================== */
+        )}
 
+        {/* Observation Scene Inspection Card Mode */}
+        {hasImages && canvasViewMode === 'SCENE_INSPECT' && (
           <div
             className="
               relative
+              z-20
               h-[85%]
               w-[90%]
               max-h-[700px]
-              transition-transform
-              duration-75
-              ease-out
+              rounded-lg
+              border border-sat-accent/30
+              bg-black/80
+              shadow-2xl
+              backdrop-blur-xl
+              overflow-hidden
             "
-            style={{
-              transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
-            }}
           >
-            {/* MAP FRAME */}
-            <div
-              className="
-                pointer-events-none
-                absolute
-                -inset-2
-                z-20
-                rounded-lg
-                border
-                border-sat-accent/15
-              "
-            />
-
             {/* BASE IMAGE */}
             {visibleLayerIds.includes('base') && (
-              <div
-                className="
-                  absolute
-                  inset-0
-                  overflow-hidden
-                  rounded-lg
-                  border border-sat-border
-                  bg-sat-surface
-                  shadow-2xl
-                "
-              >
-                <img
-                  src={
-                    compareMode === 'AFTER' &&
-                      isMultiObs
-                      ? obsAfter.imageUrl
-                      : obsBefore.imageUrl
-                  }
-                  alt="Satellite observation base"
-                  className="h-full w-full object-cover"
-                  draggable={false}
-                />
+              <div className="absolute inset-0 overflow-hidden rounded-lg bg-sat-surface">
+                {(compareMode === 'AFTER' && isMultiObs ? obsAfter.imageUrl : obsBefore.imageUrl) ? (
+                  <img
+                    src={compareMode === 'AFTER' && isMultiObs ? obsAfter.imageUrl : obsBefore.imageUrl}
+                    alt="Satellite observation base"
+                    className="h-full w-full object-cover"
+                    draggable={false}
+                    onError={(e) => {
+                      (e.currentTarget as HTMLElement).style.display = 'none';
+                      const fb = (e.currentTarget.parentNode as HTMLElement)?.querySelector('.canvas-preview-fallback') as HTMLElement;
+                      if (fb) fb.style.display = 'flex';
+                    }}
+                  />
+                ) : null}
 
-                {/* SUBTLE IMAGE VIGNETTE */}
                 <div
-                  className="
-                    pointer-events-none
-                    absolute
-                    inset-0
-                    bg-gradient-to-b
-                    from-black/10
-                    via-transparent
-                    to-black/15
-                  "
-                />
+                  className={`canvas-preview-fallback absolute inset-0 flex flex-col items-center justify-center p-4 text-center bg-sat-bg/90 ${
+                    (compareMode === 'AFTER' && isMultiObs ? obsAfter.imageUrl : obsBefore.imageUrl) ? 'hidden' : 'flex'
+                  }`}
+                >
+                  <Satellite className="h-8 w-8 text-sat-dim/50 mb-2" />
+                  <span className="text-xs font-mono font-medium text-sat-dim">
+                    Preview unavailable
+                  </span>
+                </div>
               </div>
             )}
 
             {/* BEFORE / AFTER WIPE */}
-            {isMultiObs &&
-              compareMode === 'CHANGE' &&
-              visibleLayerIds.includes('base') && (
-                <div
-                  className="
-                    pointer-events-none
-                    absolute
-                    inset-0
-                    overflow-hidden
-                    rounded-lg
-                  "
-                  style={{
-                    clipPath: `polygon(
-                      0 0,
-                      ${wipePosition}% 0,
-                      ${wipePosition}% 100%,
-                      0 100%
-                    )`,
-                  }}
-                >
-                  <img
-                    src={obsAfter.imageUrl}
-                    alt="Satellite observation target"
-                    className="h-full w-full object-cover"
-                    draggable={false}
-                  />
-
-                  <div
-                    className="
-                      absolute
-                      bottom-0
-                      top-0
-                      w-0.5
-                      bg-sat-accent
-                      shadow-[0_0_12px_#38BDF8]
-                    "
-                    style={{
-                      left: `${wipePosition}%`,
-                    }}
-                  />
-                </div>
-              )}
-
-            {/* ======================================================
-                CHANGE / HEATMAP VISUALIZATION
-            ====================================================== */}
-
-            {showOverlays && overlayMode === 'HEATMAP' && activeResult && heatmapRegions.length > 0 && (
+            {isMultiObs && compareMode === 'CHANGE' && visibleLayerIds.includes('base') && (
               <div
-                className="
-                  pointer-events-none
-                  absolute
-                  inset-0
-                  z-20
-                  overflow-hidden
-                  rounded-lg
-                "
+                className="pointer-events-none absolute inset-0 overflow-hidden rounded-lg"
+                style={{
+                  clipPath: `polygon(0 0, ${wipePosition}% 0, ${wipePosition}% 100%, 0 100%)`,
+                }}
               >
-                {/* Heatmap intensity zones anchored to evidence region coordinates */}
+                <img
+                  src={obsAfter.imageUrl}
+                  alt="Satellite observation target"
+                  className="h-full w-full object-cover"
+                  draggable={false}
+                />
+                <div
+                  className="absolute bottom-0 top-0 w-0.5 bg-sat-accent shadow-[0_0_12px_#38BDF8]"
+                  style={{ left: `${wipePosition}%` }}
+                />
+              </div>
+            )}
+
+            {/* HEATMAP VISUALIZATION */}
+            {showOverlays && overlayMode === 'HEATMAP' && activeResult && heatmapRegions.length > 0 && (
+              <div className="pointer-events-none absolute inset-0 z-20 overflow-hidden rounded-lg">
                 {heatmapRegions.map((region, idx) => {
                   const cx = (region.coords?.x ?? 30) + (region.coords?.width ?? 20) / 2;
                   const cy = (region.coords?.y ?? 30) + (region.coords?.height ?? 20) / 2;
@@ -937,7 +902,6 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
 
                   return (
                     <React.Fragment key={`heatmap-${region.id || idx}`}>
-                      {/* Outer Glow Halo */}
                       <div
                         className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full opacity-80 mix-blend-screen animate-pulse"
                         style={{
@@ -946,10 +910,9 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
                           width: `${radius * 1.5}px`,
                           height: `${radius * 1.5}px`,
                           background: 'radial-gradient(circle, rgba(239, 68, 68, 0.7) 0%, rgba(245, 158, 11, 0.5) 45%, rgba(14, 165, 233, 0.2) 75%, transparent 100%)',
-                          filter: 'blur(16px)'
+                          filter: 'blur(16px)',
                         }}
                       />
-                      {/* Core Thermal Hotspot */}
                       <div
                         className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full opacity-90 border border-amber-400/60 shadow-[0_0_35px_#ef4444]"
                         style={{
@@ -958,16 +921,12 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
                           width: `${radius * 0.7}px`,
                           height: `${radius * 0.7}px`,
                           background: 'radial-gradient(circle, rgba(255, 255, 255, 0.95) 0%, rgba(239, 68, 68, 0.9) 35%, rgba(245, 158, 11, 0.7) 70%, transparent 100%)',
-                          filter: 'blur(6px)'
+                          filter: 'blur(6px)',
                         }}
                       />
-                      {/* Heat Label Tag */}
                       <div
                         className="absolute -translate-x-1/2 -translate-y-1/2 px-2.5 py-1 rounded bg-black/90 border border-red-500/80 font-mono text-xs font-bold text-amber-300 shadow-2xl"
-                        style={{
-                          left: `${cx}%`,
-                          top: `${cy - 14}%`,
-                        }}
+                        style={{ left: `${cx}%`, top: `${cy - 14}%` }}
                       >
                         🔥 CHANGE DELTA: {region.confidence}%
                       </div>
@@ -975,7 +934,6 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
                   );
                 })}
 
-                {/* Heatmap Scale Legend */}
                 <div className="absolute bottom-3 right-3 z-30 flex items-center gap-2.5 rounded-lg border border-sat-border bg-sat-surface/95 px-3.5 py-2 font-mono text-xs backdrop-blur-md shadow-xl">
                   <span className="text-sat-dim font-bold">SPECTRAL HEATMAP:</span>
                   <div className="h-2.5 w-24 rounded bg-gradient-to-r from-cyan-500 via-amber-400 to-red-600 border border-white/30" />
@@ -985,252 +943,175 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
             )}
 
             {/* EVIDENCE LAYER */}
-            {showOverlays &&
-              overlayMode === 'EVIDENCE' &&
-              activeResult?.evidence && (
-                <EvidenceLayer
-                  evidence={activeResult.evidence}
-                  selectedRegionId={selectedRegionId}
-                  onSelectRegion={onSelectRegion}
-                  visibleLayers={visibleLayerIds}
-                />
-              )}
+            {showOverlays && overlayMode === 'EVIDENCE' && activeResult?.evidence && (
+              <EvidenceLayer
+                evidence={activeResult.evidence}
+                selectedRegionId={selectedRegionId}
+                onSelectRegion={onSelectRegion}
+                visibleLayers={visibleLayerIds}
+              />
+            )}
 
-            {/* ======================================================
-                MAP CORNER LABEL
-            ====================================================== */}
-
-            <div
-              className="
-                pointer-events-none
-                absolute
-                left-3
-                top-3
-                z-30
-                rounded
-                border border-white/10
-                bg-black/35
-                px-2
-                py-1.5
-                font-mono
-                text-[7px]
-                uppercase
-                tracking-wider
-                text-white/70
-                backdrop-blur-sm
-              "
-            >
+            {/* MAP CORNER LABEL */}
+            <div className="pointer-events-none absolute left-3 top-3 z-30 rounded border border-white/10 bg-black/50 px-2 py-1.5 font-mono text-[7px] uppercase tracking-wider text-white/80 backdrop-blur-sm">
               <div>{sceneMetadata.modality}</div>
-              <div className="mt-0.5 text-white/50">
-                {sceneMetadata.resolution}
-              </div>
+              <div className="mt-0.5 text-white/50">{sceneMetadata.resolution}</div>
             </div>
 
-            {/* ======================================================
-                NORTH INDICATOR
-            ====================================================== */}
-
-            <div
-              className="
-                pointer-events-none
-                absolute
-                right-3
-                top-3
-                z-30
-                flex
-                flex-col
-                items-center
-                rounded
-                border border-white/10
-                bg-black/35
-                px-2
-                py-1.5
-                backdrop-blur-sm
-              "
-            >
-              <span className="font-mono text-[7px] font-bold text-white/80">
-                N
-              </span>
-
+            {/* NORTH INDICATOR */}
+            <div className="pointer-events-none absolute right-3 top-3 z-30 flex flex-col items-center rounded border border-white/10 bg-black/50 px-2 py-1.5 backdrop-blur-sm">
+              <span className="font-mono text-[7px] font-bold text-white/80">N</span>
               <Navigation className="mt-0.5 h-3.5 w-3.5 rotate-0 fill-current text-white/70" />
             </div>
 
-            {/* ======================================================
-                SCALE BAR
-            ====================================================== */}
-
-            <div
-              className="
-                pointer-events-none
-                absolute
-                bottom-3
-                left-3
-                z-30
-                rounded
-                border border-white/10
-                bg-black/35
-                px-2
-                py-1.5
-                backdrop-blur-sm
-              "
-            >
+            {/* SCALE BAR */}
+            <div className="pointer-events-none absolute bottom-3 left-3 z-30 rounded border border-white/10 bg-black/50 px-2 py-1.5 backdrop-blur-sm">
               <div className="flex items-end gap-2">
                 <div>
                   <div className="h-1 w-16 border-x border-b border-white/70" />
-
                   <div className="mt-0.5 flex justify-between font-mono text-[6px] text-white/60">
                     <span>0</span>
-                    <span>
-                      {zoom >= 2
-                        ? '250 m'
-                        : zoom >= 1.25
-                          ? '500 m'
-                          : '1 km'}
-                    </span>
+                    <span>{zoom >= 2 ? '250 m' : zoom >= 1.25 ? '500 m' : '1 km'}</span>
                   </div>
                 </div>
-
-                <span className="font-mono text-[6px] uppercase text-white/50">
-                  SCALE
-                </span>
+                <span className="font-mono text-[6px] uppercase text-white/50">SCALE</span>
               </div>
             </div>
 
-            {/* ======================================================
-                EVIDENCE COUNT
-            ====================================================== */}
-
+            {/* EVIDENCE COUNT */}
             {activeResult && (
-              <div
-                className="
-                  pointer-events-none
-                  absolute
-                  bottom-3
-                  right-3
-                  z-30
-                  flex
-                  items-center
-                  gap-2
-                  rounded
-                  border border-sat-change/30
-                  bg-black/45
-                  px-2.5
-                  py-1.5
-                  font-mono
-                  backdrop-blur-sm
-                "
-              >
+              <div className="pointer-events-none absolute bottom-3 right-3 z-30 flex items-center gap-2 rounded border border-sat-change/30 bg-black/60 px-2.5 py-1.5 font-mono backdrop-blur-sm">
                 <MapPin className="h-3 w-3 text-sat-change" />
-
-                <span className="text-[7px] uppercase text-white/60">
-                  EVIDENCE
-                </span>
-
-                <span className="text-[9px] font-bold text-sat-change">
-                  {activeEvidenceCount}
-                </span>
+                <span className="text-[7px] uppercase text-white/60">EVIDENCE</span>
+                <span className="text-[9px] font-bold text-sat-change">{activeEvidenceCount}</span>
               </div>
             )}
+          </div>
+        )}
+
+        {/* Empty State Banner (Only when no images and user wants intro) */}
+        {!hasImages && (
+          <div className="pointer-events-none absolute top-6 left-1/2 -translate-x-1/2 z-20 max-w-md rounded-lg border border-sat-border/80 bg-sat-surface/90 p-4 text-center font-mono shadow-2xl backdrop-blur-xl">
+            <div className="flex items-center justify-center gap-2 text-sat-accent">
+              <Globe className="h-5 w-5" />
+              <h3 className="font-display text-xs font-bold uppercase tracking-wider text-sat-text">
+                Global Earth Canvas Active
+              </h3>
+            </div>
+            <p className="mt-1 font-sans text-[11px] text-sat-muted leading-relaxed">
+              Explore the planetary map, drag to pan, scroll to zoom, inspect real coordinates, or use the <strong className="text-sat-accent">AOI tool</strong> to select a region for satellite search.
+            </p>
+            {onSelectDemoScenario && (
+              <button
+                type="button"
+                onClick={() => onSelectDemoScenario('demo-03')}
+                className="pointer-events-auto mt-3 inline-flex items-center gap-1.5 rounded-md bg-sat-accent px-3 py-1.5 font-display text-[10px] font-bold uppercase tracking-wider text-slate-950 hover:bg-sky-300 transition-colors shadow-md"
+              >
+                <Sparkles className="h-3 w-3" />
+                <span>Load Demo Observations</span>
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Selected AOI Floating Action Card */}
+        {localAOI && (
+          <div className="absolute bottom-16 left-1/2 -translate-x-1/2 z-30 flex flex-wrap items-center gap-3 rounded-lg border border-sky-400/50 bg-sat-surface/95 px-4 py-2.5 shadow-2xl backdrop-blur-xl animate-in slide-in-from-bottom duration-200">
+            <div className="flex items-center gap-2">
+              <div className="flex h-7 w-7 items-center justify-center rounded-md bg-sky-500/20 text-sky-400">
+                <BoxSelect className="h-4 w-4" />
+              </div>
+              <div>
+                <div className="font-mono text-[9px] font-bold uppercase tracking-wider text-sat-text">
+                  Selected AOI Bounding Box
+                </div>
+                <div className="font-mono text-[8px] text-sat-accent">
+                  [{localAOI[0].toFixed(3)}, {localAOI[1].toFixed(3)}] → [{localAOI[2].toFixed(3)}, {localAOI[3].toFixed(3)}]
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 ml-2">
+              <button
+                type="button"
+                onClick={() => {
+                  if (onOpenSatelliteSearch) {
+                    onOpenSatelliteSearch(localAOI);
+                  } else {
+                    onSelectAOI?.(localAOI);
+                  }
+                }}
+                className="flex items-center gap-1.5 rounded bg-sat-accent px-3 py-1.5 font-mono text-[10px] font-bold uppercase tracking-wider text-slate-950 hover:bg-sky-300 transition-all shadow-md"
+                title="Search real satellite products in this AOI"
+              >
+                <Search className="h-3 w-3" />
+                <span>Search Satellite Products</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleClearAOI}
+                className="flex items-center gap-1 rounded border border-sat-border bg-sat-bg/80 px-2 py-1.5 font-mono text-[10px] text-sat-dim hover:text-rose-400 hover:border-rose-400 transition-colors"
+                title="Clear AOI selection"
+              >
+                <X className="h-3 w-3" />
+                <span>Clear</span>
+              </button>
+            </div>
           </div>
         )}
       </div>
 
       {/* ==========================================================
-          OVERLAY MODE STRIP
+          OVERLAY MODE STRIP (SCENE INSPECT)
       ========================================================== */}
-
-      {hasImages && (
-        <div
-          className="
-            absolute
-            bottom-11
-            left-1/2
-            z-30
-            -translate-x-1/2
-            rounded-lg
-            border border-sat-border
-            bg-sat-surface/90
-            p-1
-            shadow-xl
-            backdrop-blur-xl
-          "
-        >
+      {hasImages && canvasViewMode === 'SCENE_INSPECT' && (
+        <div className="absolute bottom-11 left-1/2 z-30 -translate-x-1/2 rounded-lg border border-sat-border bg-sat-surface/90 p-1 shadow-xl backdrop-blur-xl">
           <div className="flex items-center gap-1">
             <OverlayModeButton
               active={overlayMode === 'EVIDENCE'}
-              icon={
-                <Crosshair className="h-3 w-3" />
-              }
+              icon={<Crosshair className="h-3 w-3" />}
               label="EVIDENCE"
-              onClick={() =>
-                setOverlayMode('EVIDENCE')
-              }
+              onClick={() => setOverlayMode('EVIDENCE')}
             />
 
             <OverlayModeButton
               active={overlayMode === 'HEATMAP'}
-              icon={
-                <Activity className="h-3 w-3" />
-              }
+              icon={<Activity className="h-3 w-3" />}
               label="CHANGE HEATMAP"
-              onClick={() =>
-                setOverlayMode('HEATMAP')
-              }
+              onClick={() => setOverlayMode('HEATMAP')}
             />
           </div>
         </div>
       )}
 
       {/* ==========================================================
-          BOTTOM TELEMETRY / COORDINATE HUD
+          BOTTOM TELEMETRY / GENUINE GEOGRAPHIC COORDINATE HUD
       ========================================================== */}
-
-      <div
-        className="
-          relative
-          z-40
-          shrink-0
-          border-t border-sat-border
-          bg-sat-bg/95
-          px-3
-          py-2
-          backdrop-blur-xl
-          sm:px-4
-        "
-      >
+      <div className="relative z-40 shrink-0 border-t border-sat-border bg-sat-bg/95 px-3 py-2 backdrop-blur-xl sm:px-4">
         <div className="flex flex-wrap items-center justify-between gap-x-5 gap-y-1.5 font-mono text-[8px]">
-          {/* Cursor coordinates */}
+          {/* Genuine Geographic coordinates */}
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
             <HudValue
-              icon={
-                <Crosshair className="h-3 w-3" />
-              }
+              icon={<Crosshair className="h-3 w-3" />}
               label="LAT"
               value={cursorCoords.lat}
             />
 
             <HudValue
-              icon={
-                <MapPin className="h-3 w-3" />
-              }
+              icon={<MapPin className="h-3 w-3" />}
               label="LON"
               value={cursorCoords.lon}
             />
 
             <HudValue
-              icon={
-                <Gauge className="h-3 w-3" />
-              }
+              icon={<Gauge className="h-3 w-3" />}
               label="ZOOM"
-              value={`1 : ${Math.round(
-                25000 / zoom
-              ).toLocaleString()}`}
+              value={`Z ${mapZoomLevel.toFixed(1)}`}
             />
 
             <HudValue
-              icon={
-                <ScanLine className="h-3 w-3" />
-              }
+              icon={<ScanLine className="h-3 w-3" />}
               label="GSD"
               value={sceneMetadata.resolution}
               hideOnSmall
@@ -1241,15 +1122,12 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
           <div className="flex items-center gap-3">
             <span className="hidden items-center gap-1.5 text-sat-dim sm:flex">
               <Database className="h-3 w-3" />
-              {activeObservationIds.length} DATASET
-              {activeObservationIds.length === 1
-                ? ''
-                : 'S'}
+              {activeObservationIds.length} DATASET{activeObservationIds.length === 1 ? '' : 'S'}
             </span>
 
             <span className="flex items-center gap-1.5 text-sat-stable">
-              <span className="h-1.5 w-1.5 rounded-full bg-sat-stable" />
-              CANVAS READY
+              <span className="h-1.5 w-1.5 rounded-full bg-sat-stable shadow-[0_0_6px_currentColor]" />
+              GEOGRAPHIC MAP READY
             </span>
           </div>
         </div>
@@ -1267,9 +1145,7 @@ interface TelemetryCellProps {
   value: any;
 }
 
-const TelemetryCell: React.FC<
-  TelemetryCellProps
-> = ({ label, value }) => {
+const TelemetryCell: React.FC<TelemetryCellProps> = ({ label, value }) => {
   const displayVal = typeof value === 'object' && value !== null ? JSON.stringify(value) : String(value || 'N/A');
   return (
     <div className="min-w-0 bg-sat-bg/90 px-2 py-2">
@@ -1278,14 +1154,7 @@ const TelemetryCell: React.FC<
       </div>
 
       <div
-        className="
-          mt-0.5
-          truncate
-          font-mono
-          text-[8px]
-          font-semibold
-          text-sat-text
-        "
+        className="mt-0.5 truncate font-mono text-[8px] font-semibold text-sat-text"
         title={displayVal}
       >
         {displayVal}
@@ -1305,34 +1174,24 @@ interface InstrumentButtonProps {
   onClick: () => void;
 }
 
-const InstrumentButton: React.FC<
-  InstrumentButtonProps
-> = ({ icon, label, active, onClick }) => {
+const InstrumentButton: React.FC<InstrumentButtonProps> = ({
+  icon,
+  label,
+  active,
+  onClick,
+}) => {
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`
-        group
-        flex
-        h-10
-        w-11
-        flex-col
-        items-center
-        justify-center
-        gap-0.5
-        border-b border-sat-border
-        last:border-b-0
-        transition-colors
-        ${active
-          ? 'bg-sat-accent/10 text-sat-accent'
+      className={`group flex h-10 w-11 flex-col items-center justify-center gap-0.5 border-b border-sat-border last:border-b-0 transition-colors ${
+        active
+          ? 'bg-sat-accent/20 text-sat-accent font-bold'
           : 'text-sat-dim hover:bg-sat-panel hover:text-sat-accent'
-        }
-      `}
+      }`}
       title={label}
     >
       {icon}
-
       <span className="font-mono text-[5px] font-bold tracking-wider">
         {label}
       </span>
@@ -1351,67 +1210,25 @@ interface OverlayModeButtonProps {
   onClick: () => void;
 }
 
-const OverlayModeButton: React.FC<
-  OverlayModeButtonProps
-> = ({ active, icon, label, onClick }) => {
+const OverlayModeButton: React.FC<OverlayModeButtonProps> = ({
+  active,
+  icon,
+  label,
+  onClick,
+}) => {
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`
-        flex
-        items-center
-        gap-1.5
-        rounded
-        px-2.5
-        py-1.5
-        font-mono
-        text-[7px]
-        font-bold
-        uppercase
-        tracking-wider
-        transition-all
-        ${active
+      className={`flex items-center gap-1.5 rounded px-2.5 py-1.5 font-mono text-[7px] font-bold uppercase tracking-wider transition-all ${
+        active
           ? 'bg-sat-accent text-slate-950'
           : 'text-sat-dim hover:bg-sat-panel hover:text-sat-text'
-        }
-      `}
+      }`}
     >
       {icon}
       {label}
     </button>
-  );
-};
-
-/* ================================================================
-   MINI CAPABILITY
-================================================================ */
-
-interface MiniCapabilityProps {
-  label: string;
-  value: string;
-}
-
-const MiniCapability: React.FC<
-  MiniCapabilityProps
-> = ({ label, value }) => {
-  return (
-    <div
-      className="
-        rounded
-        border border-sat-border
-        bg-sat-bg
-        p-2
-      "
-    >
-      <div className="font-mono text-[6px] uppercase tracking-wider text-sat-dim">
-        {label}
-      </div>
-
-      <div className="mt-0.5 font-mono text-[8px] font-bold text-sat-accent">
-        {value}
-      </div>
-    </div>
   );
 };
 
@@ -1434,26 +1251,13 @@ const HudValue: React.FC<HudValueProps> = ({
 }) => {
   return (
     <div
-      className={`
-        items-center
-        gap-1.5
-        ${hideOnSmall
-          ? 'hidden sm:flex'
-          : 'flex'
-        }
-      `}
+      className={`items-center gap-1.5 ${
+        hideOnSmall ? 'hidden sm:flex' : 'flex'
+      }`}
     >
-      <span className="text-sat-accent">
-        {icon}
-      </span>
-
-      <span className="text-sat-dim">
-        {label}:
-      </span>
-
-      <span className="font-semibold text-sat-text">
-        {value}
-      </span>
+      <span className="text-sat-accent">{icon}</span>
+      <span className="text-sat-dim">{label}:</span>
+      <span className="font-semibold text-sat-text">{value}</span>
     </div>
   );
 };

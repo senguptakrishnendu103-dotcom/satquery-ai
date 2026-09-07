@@ -585,9 +585,10 @@ def search_satellite_data(req: DataSearchRequest):
             limit=req.limit,
             filters=req.filters,
         )
+        search_req.validate()
         resp = prov.search(search_req)
         return resp.to_dict()
-    except InvalidSearchRequestError as e:
+    except (InvalidSearchRequestError, ValueError) as e:
         raise HTTPException(status_code=400, detail=str(e))
     except ProviderAuthError as e:
         raise HTTPException(status_code=401, detail=str(e))
@@ -624,23 +625,37 @@ def download_satellite_product(req: DataDownloadRequest):
                 product_id=req.product_id,
                 collection=req.collection,
             )
-            analysis_asset = manifest.get("analysis_stack") or manifest.get("primary_raster") or manifest.get("display_raster")
+            candidate_asset = (
+                manifest.get("model_file_path")
+                or manifest.get("local_path")
+                or (manifest.get("analysis_asset") if isinstance(manifest.get("analysis_asset"), str) else None)
+                or (manifest.get("analysis_asset", {}).get("path") if isinstance(manifest.get("analysis_asset"), dict) else None)
+                or manifest.get("raster_path")
+                or file_path
+            )
+            analysis_asset = Path(candidate_asset)
+            clean_name = analysis_asset.name
             metadata = MetadataExtractor.extract_metadata(str(analysis_asset), clean_name)
             metadata["archive_manifest"] = manifest
+            metadata["analysis_asset"] = str(analysis_asset)
+            metadata["analysisAsset"] = str(analysis_asset)
         else:
+            analysis_asset = file_path
             metadata = MetadataExtractor.extract_metadata(str(file_path), clean_name)
+            metadata["analysis_asset"] = str(file_path)
+            metadata["analysisAsset"] = str(file_path)
 
         metadata["id"] = f"fetch_{uuid.uuid4().hex}"
         metadata["provider"] = req.provider
         metadata["product_id"] = req.product_id
         metadata["collection"] = req.collection or metadata.get("platform")
         metadata["source_type"] = "web_fetch"
-        metadata["file_path"] = str(file_path)
-        metadata["local_path"] = str(file_path)
+        metadata["file_path"] = str(analysis_asset)
+        metadata["local_path"] = str(analysis_asset)
         metadata["cached"] = dl_result.cached
         metadata["download_timestamp"] = dl_result.download_timestamp
 
-        public_url = ImageResolver.ensure_displayable_preview(str(file_path))
+        public_url = ImageResolver.ensure_displayable_preview(str(analysis_asset))
         metadata["url"] = public_url
         metadata["image_url"] = public_url
         metadata["imageUrl"] = public_url
@@ -973,121 +988,6 @@ def analyze(req: AnalyzeRequest):
         del ANALYSIS_HISTORY[100:]
 
     return result
-
-
-# ============================================================
-# SATELLITE DATA PROVIDERS (WEB FETCH)
-# ============================================================
-
-@app.get("/api/data/providers")
-def get_satellite_providers():
-    """List registered satellite data providers."""
-    return {"providers": list_providers()}
-
-
-@app.post("/api/data/search")
-def search_satellite_data(req: DataSearchRequest):
-    """
-    Search satellite data from configured provider (e.g. ISRO Bhoonidhi).
-    """
-    try:
-        provider = get_provider(req.provider)
-        search_req = SearchRequest(
-            provider=req.provider,
-            collections=req.collections,
-            bbox=tuple(req.bbox) if req.bbox and len(req.bbox) == 4 else None,
-            datetime_range=req.datetime_range,
-            limit=req.limit,
-            filters=req.filters,
-        )
-        response = provider.search(search_req)
-        return response.to_dict()
-    except InvalidSearchRequestError as err:
-        raise HTTPException(status_code=400, detail=str(err))
-    except ProviderAuthError as err:
-        raise HTTPException(status_code=401, detail=str(err))
-    except ProviderRateLimitError as err:
-        raise HTTPException(status_code=429, detail=str(err))
-    except ProviderNetworkError as err:
-        raise HTTPException(status_code=502, detail=str(err))
-    except ProviderError as err:
-        raise HTTPException(status_code=400, detail=str(err))
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Search failed: {exc}")
-
-
-@app.post("/api/data/download")
-async def download_satellite_data(req: DataDownloadRequest):
-    """
-    Download satellite observation package from provider and ingest into workspace.
-    """
-    try:
-        provider = get_provider(req.provider)
-        download_dir = UPLOAD_DIR / "bhoonidhi"
-        download_dir.mkdir(parents=True, exist_ok=True)
-
-        res = provider.download(
-            product_id=req.product_id,
-            destination_dir=download_dir,
-            collection=req.collection,
-            force_redownload=req.force_redownload,
-        )
-
-        local_path = Path(res.local_path)
-
-        # Ingest archive or single raster
-        if local_path.suffix.lower() in {".zip", ".tar", ".gz"}:
-            ingestor = RasterIngestor(download_dir)
-            ingest_result = ingestor.ingest_archive(str(local_path))
-            raster_file = ingest_result.get("raster_path", str(local_path))
-            metadata = ingest_result.get("metadata", {})
-        else:
-            raster_file = str(local_path)
-            metadata = MetadataExtractor.extract_metadata(
-                raster_file,
-                local_path.name,
-            )
-
-        raster_name = Path(raster_file).name
-        public_url = f"/static/uploads/bhoonidhi/{raster_name}"
-
-        # Standard observation contract
-        metadata["id"] = f"bhoonidhi_{uuid.uuid4().hex[:8]}"
-        metadata["name"] = raster_name
-        metadata["filename"] = raster_name
-        metadata["url"] = public_url
-        metadata["image_url"] = public_url
-        metadata["imageUrl"] = public_url
-        metadata["file_path"] = str(raster_file)
-        metadata["local_path"] = str(raster_file)
-        metadata["source_type"] = "web_fetch"
-        metadata["provider"] = req.provider
-        metadata["product_id"] = req.product_id
-        if req.collection:
-            metadata["collection"] = req.collection
-
-        return {
-            "status": "success",
-            "observation": metadata,
-            "download": res.to_dict(),
-        }
-
-    except InvalidSearchRequestError as err:
-        raise HTTPException(status_code=400, detail=str(err))
-    except ProviderAuthError as err:
-        raise HTTPException(status_code=401, detail=str(err))
-    except ProductNotFoundError as err:
-        raise HTTPException(status_code=404, detail=str(err))
-    except ProductNotAvailableError as err:
-        raise HTTPException(status_code=422, detail=str(err))
-    except ProviderRateLimitError as err:
-        raise HTTPException(status_code=429, detail=str(err))
-    except ProviderNetworkError as err:
-        raise HTTPException(status_code=502, detail=str(err))
-    except ProviderError as err:
-        raise HTTPException(status_code=400, detail=str(err))
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Download and ingestion failed: {exc}")
 
 
 # ============================================================
