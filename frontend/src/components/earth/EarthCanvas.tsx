@@ -56,41 +56,59 @@ interface CursorPosition {
 const MAP_STYLE: maplibregl.StyleSpecification = {
   version: 8,
   sources: {
-    'carto-dark': {
+    'esri-dark': {
       type: 'raster',
       tiles: [
-        'https://a.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}@2x.png',
-        'https://b.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}@2x.png',
-        'https://c.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}@2x.png',
-        'https://d.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}@2x.png',
+        'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',
       ],
       tileSize: 256,
-      attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+      attribution: '&copy; Esri, DeLorme, NAVTEQ',
+      maxzoom: 16,
     },
-    'carto-labels': {
+    'esri-satellite': {
       type: 'raster',
       tiles: [
-        'https://a.basemaps.cartocdn.com/rastertiles/dark_only_labels/{z}/{x}/{y}@2x.png',
-        'https://b.basemaps.cartocdn.com/rastertiles/dark_only_labels/{z}/{x}/{y}@2x.png',
-        'https://c.basemaps.cartocdn.com/rastertiles/dark_only_labels/{z}/{x}/{y}@2x.png',
-        'https://d.basemaps.cartocdn.com/rastertiles/dark_only_labels/{z}/{x}/{y}@2x.png',
+        'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+      ],
+      tileSize: 256,
+      attribution: '&copy; Esri, Maxar, Earthstar Geographics',
+      maxzoom: 19,
+    },
+    'esri-boundaries': {
+      type: 'raster',
+      tiles: [
+        'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}',
       ],
       tileSize: 256,
       attribution: '',
+      maxzoom: 16,
     },
   },
   layers: [
     {
-      id: 'carto-dark-layer',
+      id: 'esri-dark-layer',
       type: 'raster',
-      source: 'carto-dark',
+      source: 'esri-dark',
       minzoom: 0,
       maxzoom: 20,
+      layout: {
+        visibility: 'visible',
+      },
     },
     {
-      id: 'carto-labels-layer',
+      id: 'esri-satellite-layer',
       type: 'raster',
-      source: 'carto-labels',
+      source: 'esri-satellite',
+      minzoom: 0,
+      maxzoom: 20,
+      layout: {
+        visibility: 'none',
+      },
+    },
+    {
+      id: 'boundaries-layer',
+      type: 'raster',
+      source: 'esri-boundaries',
       minzoom: 0,
       maxzoom: 20,
       layout: {
@@ -137,9 +155,15 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
   const [mapLayers, setMapLayers] = useState<MapLayerConfig[]>([
     {
       id: 'base',
-      name: 'BASE OBSERVATION',
+      name: 'DARK GIS BASEMAP',
       visible: true,
       color: '#38BDF8',
+    },
+    {
+      id: 'satellite',
+      name: 'SATELLITE IMAGERY',
+      visible: false,
+      color: '#10B981',
     },
     {
       id: 'change',
@@ -472,14 +496,23 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
     });
   };
 
-  // Synchronize Country/Region Boundaries layer with LayerControl
+  // Synchronize Basemap, Satellite & Boundaries layers with LayerControl
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !map.isStyleLoaded()) return;
 
+    const isDarkVisible = mapLayers.find((l) => l.id === 'base')?.visible ?? true;
+    const isSatVisible = mapLayers.find((l) => l.id === 'satellite')?.visible ?? false;
     const isBoundariesVisible = mapLayers.find((l) => l.id === 'boundaries')?.visible ?? true;
-    if (map.getLayer('carto-labels-layer')) {
-      map.setLayoutProperty('carto-labels-layer', 'visibility', isBoundariesVisible ? 'visible' : 'none');
+
+    if (map.getLayer('esri-dark-layer')) {
+      map.setLayoutProperty('esri-dark-layer', 'visibility', isDarkVisible ? 'visible' : 'none');
+    }
+    if (map.getLayer('esri-satellite-layer')) {
+      map.setLayoutProperty('esri-satellite-layer', 'visibility', isSatVisible ? 'visible' : 'none');
+    }
+    if (map.getLayer('boundaries-layer')) {
+      map.setLayoutProperty('boundaries-layer', 'visibility', isBoundariesVisible ? 'visible' : 'none');
     }
   }, [mapLayers]);
 
