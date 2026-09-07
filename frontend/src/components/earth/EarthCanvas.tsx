@@ -143,8 +143,19 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
   const [isAoiMode, setIsAoiMode] = useState(false);
   const isAoiModeRef = useRef(false);
   const [localAOI, setLocalAOI] = useState<[number, number, number, number] | null>(selectedAOI || null);
-  const isDrawingAoiRef = useRef(false);
-  const aoiStartPointRef = useRef<{ lng: number; lat: number } | null>(null);
+  const [dragBox, setDragBox] = useState<{
+    startX: number;
+    startY: number;
+    currentX: number;
+    currentY: number;
+  } | null>(null);
+  const isDrawingRef = useRef(false);
+  const dragBoxRef = useRef<{
+    startX: number;
+    startY: number;
+    currentX: number;
+    currentY: number;
+  } | null>(null);
 
   // ================================================================
   // MAP LAYERS
@@ -409,46 +420,6 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
         visible: true,
       });
 
-      // Handle AOI drawing
-      if (isDrawingAoiRef.current && aoiStartPointRef.current) {
-        const start = aoiStartPointRef.current;
-        const minLon = Math.min(start.lng, lng);
-        const maxLon = Math.max(start.lng, lng);
-        const minLat = Math.min(start.lat, lat);
-        const maxLat = Math.max(start.lat, lat);
-        renderAoiBox(map, [minLon, minLat, maxLon, maxLat]);
-      }
-    });
-
-    map.on('mousedown', (e) => {
-      if (!isAoiModeRef.current) return;
-      isDrawingAoiRef.current = true;
-      aoiStartPointRef.current = { lng: e.lngLat.lng, lat: e.lngLat.lat };
-      map.dragPan.disable();
-    });
-
-    map.on('mouseup', (e) => {
-      if (!isDrawingAoiRef.current || !aoiStartPointRef.current) return;
-      isDrawingAoiRef.current = false;
-      map.dragPan.enable();
-
-      const start = aoiStartPointRef.current;
-      const minLon = Math.min(start.lng, e.lngLat.lng);
-      const maxLon = Math.max(start.lng, e.lngLat.lng);
-      const minLat = Math.min(start.lat, e.lngLat.lat);
-      const maxLat = Math.max(start.lat, e.lngLat.lat);
-
-      if (Math.abs(maxLon - minLon) > 0.002 && Math.abs(maxLat - minLat) > 0.002) {
-        const newBbox: [number, number, number, number] = [minLon, minLat, maxLon, maxLat];
-        setLocalAOI(newBbox);
-        onSelectAOI?.(newBbox);
-        renderAoiBox(map, newBbox);
-      }
-
-      aoiStartPointRef.current = null;
-      setIsAoiMode(false);
-      isAoiModeRef.current = false;
-      map.getCanvas().style.cursor = '';
     });
 
     map.on('mouseout', () => {
@@ -637,10 +608,113 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
 
   const handleClearAOI = () => {
     setLocalAOI(null);
+    dragBoxRef.current = null;
+    setDragBox(null);
     onSelectAOI?.(null);
     if (mapRef.current) {
       renderAoiBox(mapRef.current, null);
     }
+  };
+
+  const handleAoiOverlayMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isAoiMode) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    isDrawingRef.current = true;
+    const initialBox = {
+      startX: x,
+      startY: y,
+      currentX: x,
+      currentY: y,
+    };
+    dragBoxRef.current = initialBox;
+    setDragBox(initialBox);
+  };
+
+  const handleAoiOverlayMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    if (mapRef.current) {
+      try {
+        const lngLat = mapRef.current.unproject([x, y]);
+        const latStr = `${Math.abs(lngLat.lat).toFixed(4)}° ${lngLat.lat >= 0 ? 'N' : 'S'}`;
+        const lonStr = `${Math.abs(lngLat.lng).toFixed(4)}° ${lngLat.lng >= 0 ? 'E' : 'W'}`;
+        setCursorCoords({
+          lat: latStr,
+          lon: lonStr,
+          x,
+          y,
+          visible: true,
+        });
+      } catch {
+        // ignore
+      }
+    }
+
+    if (!isDrawingRef.current || !dragBoxRef.current) return;
+
+    const currentBox = { ...dragBoxRef.current, currentX: x, currentY: y };
+    dragBoxRef.current = currentBox;
+    setDragBox(currentBox);
+
+    if (mapRef.current) {
+      try {
+        const p1 = mapRef.current.unproject([Math.min(currentBox.startX, x), Math.min(currentBox.startY, y)]);
+        const p2 = mapRef.current.unproject([Math.max(currentBox.startX, x), Math.max(currentBox.startY, y)]);
+        const minLon = Math.min(p1.lng, p2.lng);
+        const maxLon = Math.max(p1.lng, p2.lng);
+        const minLat = Math.min(p1.lat, p2.lat);
+        const maxLat = Math.max(p1.lat, p2.lat);
+        renderAoiBox(mapRef.current, [minLon, minLat, maxLon, maxLat]);
+      } catch {
+        // ignore
+      }
+    }
+  };
+
+  const handleAoiOverlayMouseUp = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isDrawingRef.current || !dragBoxRef.current) {
+      isDrawingRef.current = false;
+      dragBoxRef.current = null;
+      setDragBox(null);
+      return;
+    }
+
+    isDrawingRef.current = false;
+    const currentBox = dragBoxRef.current;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const endX = e.clientX - rect.left;
+    const endY = e.clientY - rect.top;
+
+    const width = Math.abs(endX - currentBox.startX);
+    const height = Math.abs(endY - currentBox.startY);
+
+    if (width > 8 && height > 8 && mapRef.current) {
+      try {
+        const p1 = mapRef.current.unproject([Math.min(currentBox.startX, endX), Math.min(currentBox.startY, endY)]);
+        const p2 = mapRef.current.unproject([Math.max(currentBox.startX, endX), Math.max(currentBox.startY, endY)]);
+        const minLon = Math.min(p1.lng, p2.lng);
+        const maxLon = Math.max(p1.lng, p2.lng);
+        const minLat = Math.min(p1.lat, p2.lat);
+        const maxLat = Math.max(p1.lat, p2.lat);
+
+        if (Math.abs(maxLon - minLon) > 0.001 && Math.abs(maxLat - minLat) > 0.001) {
+          const newBbox: [number, number, number, number] = [minLon, minLat, maxLon, maxLat];
+          setLocalAOI(newBbox);
+          onSelectAOI?.(newBbox);
+          renderAoiBox(mapRef.current, newBbox);
+        }
+      } catch (err) {
+        console.error('AOI unproject error:', err);
+      }
+    }
+
+    dragBoxRef.current = null;
+    setDragBox(null);
+    setIsAoiMode(false);
   };
 
   const sceneStatus = activeResult
@@ -847,6 +921,39 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
         {/* GIS Grid Overlay */}
         {showGrid && (
           <div className="pointer-events-none absolute inset-0 z-10 bg-gis-grid opacity-25" />
+        )}
+
+        {/* Interactive AOI Drag Surface */}
+        {isAoiMode && (
+          <div
+            className="absolute inset-0 z-20 cursor-crosshair select-none"
+            onMouseDown={handleAoiOverlayMouseDown}
+            onMouseMove={handleAoiOverlayMouseMove}
+            onMouseUp={handleAoiOverlayMouseUp}
+            onMouseLeave={() => {
+              if (isDrawingRef.current) {
+                isDrawingRef.current = false;
+                dragBoxRef.current = null;
+                setDragBox(null);
+              }
+            }}
+          >
+            {dragBox && (
+              <div
+                className="absolute border-2 border-dashed border-sky-400 bg-sky-500/20 shadow-[0_0_20px_rgba(56,189,248,0.5)] pointer-events-none"
+                style={{
+                  left: Math.min(dragBox.startX, dragBox.currentX),
+                  top: Math.min(dragBox.startY, dragBox.currentY),
+                  width: Math.abs(dragBox.currentX - dragBox.startX),
+                  height: Math.abs(dragBox.currentY - dragBox.startY),
+                }}
+              >
+                <div className="absolute -top-6 left-0 bg-sat-surface/95 border border-sky-400 text-sky-300 font-mono text-[9px] px-2 py-0.5 rounded shadow-lg whitespace-nowrap">
+                  AOI: {Math.round(Math.abs(dragBox.currentX - dragBox.startX))} × {Math.round(Math.abs(dragBox.currentY - dragBox.startY))} px
+                </div>
+              </div>
+            )}
+          </div>
         )}
 
         {/* AOI Selection Hint Mode */}
