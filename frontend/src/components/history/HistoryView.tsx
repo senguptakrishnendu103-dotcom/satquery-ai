@@ -1,5 +1,9 @@
 import React, { useMemo, useState } from 'react';
-import type { QueryHistoryItem } from '../../types/satquery';
+import type { QueryHistoryItem, AnalysisResult } from '../../types/satquery';
+import {
+  printIntelligenceBrief,
+  downloadIntelligenceBriefHtml,
+} from '../../utils/intelligenceBriefGenerator';
 import {
   ArrowUpRight,
   BarChart3,
@@ -239,417 +243,54 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
 
   /* ================================================================
      INTELLIGENCE BRIEF
-
-     Uses a print-friendly HTML document so the browser's
-     Print -> Save as PDF can produce a real PDF without
-     adding a frontend dependency.
+     Uses high-fidelity print and download generator
   ================================================================= */
+
+  const getAnalysisResultFromHistory = (item: QueryHistoryItem): AnalysisResult => {
+    if (item.result) return item.result;
+
+    return {
+      id: item.id,
+      queryText: item.queryText,
+      task: item.analysisType,
+      models: ['Specialist Remote-Sensing Pipeline'],
+      status: item.status as any || 'COMPLETE',
+      confidence: item.confidence,
+      headline: item.resultSummary || `${item.analysisType} Analysis Completed`,
+      answer: item.resultSummary || `Analysis for "${item.queryText}" completed successfully with ${item.confidence}% confidence score.`,
+      evidence: [],
+      executionSummary: {
+        task: item.analysisType,
+        inputs: item.observationsUsed,
+        modelsUsed: ['Specialist Remote-Sensing Pipeline'],
+        toolsExecuted: ['specialist_execution'],
+        telemetryId: item.id,
+      },
+      replaySteps: [],
+      followUpActions: [],
+      timestamp: item.timestamp,
+    };
+  };
 
   const exportIntelligenceBrief = (
     item: QueryHistoryItem
   ) => {
-    const reportWindow =
-      window.open(
-        '',
-        '_blank',
-        'noopener,noreferrer,width=1100,height=800'
-      );
+    const analysisResult = getAnalysisResultFromHistory(item);
+    printIntelligenceBrief(analysisResult, {
+      executionId: item.id,
+      queryText: item.queryText,
+    });
+    setShowExportMenu(null);
+  };
 
-    if (!reportWindow) {
-      return;
-    }
-
-    const escapedQuery =
-      escapeHtml(item.queryText);
-
-    const escapedType =
-      escapeHtml(item.analysisType);
-
-    const escapedStatus =
-      escapeHtml(item.status);
-
-    const escapedTimestamp =
-      escapeHtml(item.timestamp);
-
-    const observationRows =
-      item.observationsUsed
-        .map(
-          (observation, index) => `
-            <div class="obs-row">
-              <span class="obs-index">0${index + 1}</span>
-              <span>${escapeHtml(
-            observation
-          )}</span>
-            </div>
-          `
-        )
-        .join('');
-
-    const confidence =
-      Math.max(
-        0,
-        Math.min(100, item.confidence)
-      );
-
-    reportWindow.document.write(`
-      <!doctype html>
-      <html>
-        <head>
-          <meta charset="utf-8" />
-          <title>SatQuery Intelligence Brief — ${escapedType}</title>
-
-          <style>
-            @page {
-              size: A4;
-              margin: 16mm;
-            }
-
-            * {
-              box-sizing: border-box;
-            }
-
-            body {
-              margin: 0;
-              color: #1c1814;
-              background: #fffdf8;
-              font-family:
-                Inter,
-                Arial,
-                sans-serif;
-            }
-
-            .page {
-              max-width: 900px;
-              margin: 0 auto;
-            }
-
-            .header {
-              display: flex;
-              justify-content: space-between;
-              align-items: flex-start;
-              padding-bottom: 18px;
-              border-bottom: 2px solid #1c1814;
-            }
-
-            .eyebrow {
-              font-family: monospace;
-              font-size: 10px;
-              letter-spacing: 0.16em;
-              font-weight: 700;
-              text-transform: uppercase;
-              color: #1677a8;
-            }
-
-            h1 {
-              margin: 8px 0 4px;
-              font-size: 26px;
-              line-height: 1.1;
-              letter-spacing: -0.02em;
-            }
-
-            .subtitle {
-              color: #6b6257;
-              font-size: 12px;
-            }
-
-            .exec {
-              text-align: right;
-              font-family: monospace;
-              font-size: 9px;
-              color: #6b6257;
-            }
-
-            .section {
-              margin-top: 24px;
-              break-inside: avoid;
-            }
-
-            .section-title {
-              display: flex;
-              justify-content: space-between;
-              padding-bottom: 7px;
-              border-bottom: 1px solid #d8cdbd;
-              font-family: monospace;
-              font-size: 10px;
-              font-weight: 800;
-              letter-spacing: 0.12em;
-              text-transform: uppercase;
-            }
-
-            .question {
-              margin-top: 12px;
-              padding: 15px;
-              background: #f2ece2;
-              border-left: 3px solid #1677a8;
-              font-size: 14px;
-              line-height: 1.55;
-            }
-
-            .grid {
-              display: grid;
-              grid-template-columns: 1fr 1fr;
-              gap: 10px;
-              margin-top: 12px;
-            }
-
-            .card {
-              padding: 13px;
-              border: 1px solid #d8cdbd;
-              background: #fffdf8;
-            }
-
-            .label {
-              font-family: monospace;
-              font-size: 8px;
-              color: #81776a;
-              text-transform: uppercase;
-              letter-spacing: 0.08em;
-            }
-
-            .value {
-              margin-top: 5px;
-              font-family: monospace;
-              font-size: 11px;
-              font-weight: 700;
-            }
-
-            .confidence {
-              margin-top: 12px;
-            }
-
-            .bar {
-              height: 8px;
-              margin-top: 7px;
-              background: #eae2d5;
-              overflow: hidden;
-            }
-
-            .fill {
-              height: 100%;
-              width: ${confidence}%;
-              background: #08745d;
-            }
-
-            .obs-row {
-              display: flex;
-              gap: 12px;
-              padding: 10px 0;
-              border-bottom: 1px solid #eae2d5;
-              font-family: monospace;
-              font-size: 10px;
-            }
-
-            .obs-index {
-              color: #1677a8;
-              font-weight: 800;
-            }
-
-            .timeline {
-              margin-top: 10px;
-            }
-
-            .step {
-              display: flex;
-              gap: 12px;
-              padding: 9px 0;
-              border-bottom: 1px solid #eae2d5;
-            }
-
-            .dot {
-              width: 16px;
-              height: 16px;
-              flex: 0 0 16px;
-              border-radius: 50%;
-              background: #08745d;
-            }
-
-            .step-title {
-              font-family: monospace;
-              font-size: 10px;
-              font-weight: 800;
-            }
-
-            .step-description {
-              margin-top: 3px;
-              color: #6b6257;
-              font-size: 10px;
-              line-height: 1.4;
-            }
-
-            .footer {
-              margin-top: 35px;
-              padding-top: 12px;
-              border-top: 1px solid #d8cdbd;
-              display: flex;
-              justify-content: space-between;
-              font-family: monospace;
-              font-size: 8px;
-              color: #81776a;
-            }
-
-            @media print {
-              .no-print {
-                display: none;
-              }
-            }
-          </style>
-        </head>
-
-        <body>
-          <main class="page">
-
-            <header class="header">
-              <div>
-                <div class="eyebrow">
-                  SATQUERY AI
-                </div>
-
-                <h1>
-                  Earth Observation
-                  Intelligence Brief
-                </h1>
-
-                <div class="subtitle">
-                  Auditable analysis archive
-                </div>
-              </div>
-
-              <div class="exec">
-                <div>HISTORY ID</div>
-                <strong>${escapeHtml(
-      item.id
-    )}</strong>
-
-                <div style="margin-top:8px">
-                  ${escapedTimestamp}
-                </div>
-              </div>
-            </header>
-
-            <section class="section">
-              <div class="section-title">
-                <span>Analysis</span>
-                <span>${escapedStatus}</span>
-              </div>
-
-              <div class="question">
-                "${escapedQuery}"
-              </div>
-
-              <div class="grid">
-                <div class="card">
-                  <div class="label">
-                    Analysis type
-                  </div>
-                  <div class="value">
-                    ${escapedType}
-                  </div>
-                </div>
-
-                <div class="card">
-                  <div class="label">
-                    Observations
-                  </div>
-                  <div class="value">
-                    ${item.observationsUsed.length}
-                    DATASET(S)
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            <section class="section">
-              <div class="section-title">
-                <span>Confidence</span>
-                <span>${confidence}%</span>
-              </div>
-
-              <div class="confidence">
-                <div class="bar">
-                  <div class="fill"></div>
-                </div>
-              </div>
-            </section>
-
-            <section class="section">
-              <div class="section-title">
-                <span>Input observations</span>
-                <span>${item.observationsUsed.length}</span>
-              </div>
-
-              <div style="margin-top: 8px">
-                ${observationRows}
-              </div>
-            </section>
-
-            <section class="section">
-              <div class="section-title">
-                <span>Execution workflow</span>
-                <span>OBSERVABLE TRACE</span>
-              </div>
-
-              <div class="timeline">
-                ${REPLAY_STEPS.map(
-      (step, index) => `
-                    <div class="step">
-                      <div class="dot"></div>
-                      <div>
-                        <div class="step-title">
-                          0${index + 1}
-                          &nbsp;
-                          ${escapeHtml(
-        step.label
-      )}
-                        </div>
-                        <div class="step-description">
-                          ${escapeHtml(
-        step.description
-      )}
-                        </div>
-                      </div>
-                    </div>
-                  `
-    ).join('')}
-              </div>
-            </section>
-
-            <div class="footer">
-              <span>
-                SATQUERY AI · AUDITABLE EARTH OBSERVATION
-              </span>
-
-              <span>
-                GENERATED ${new Date().toISOString()}
-              </span>
-            </div>
-
-            <div
-              class="no-print"
-              style="
-                margin-top:24px;
-                padding:12px;
-                background:#f2ece2;
-                font-family:monospace;
-                font-size:10px;
-              "
-            >
-              Use your browser's Print dialog and choose
-              "Save as PDF" to create the final PDF.
-            </div>
-
-          </main>
-        </body>
-      </html>
-    `);
-
-    reportWindow.document.close();
-
-    reportWindow.focus();
-
-    window.setTimeout(() => {
-      reportWindow.print();
-    }, 350);
-
+  const downloadIntelligenceBrief = (
+    item: QueryHistoryItem
+  ) => {
+    const analysisResult = getAnalysisResultFromHistory(item);
+    downloadIntelligenceBriefHtml(analysisResult, {
+      executionId: item.id,
+      queryText: item.queryText,
+    });
     setShowExportMenu(null);
   };
 
@@ -1240,6 +881,39 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
 
                                       <span className="block font-sans text-[8px] text-sat-dim">
                                         Print / Save as PDF
+                                      </span>
+                                    </span>
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      downloadIntelligenceBrief(
+                                        item
+                                      )
+                                    }
+                                    className="
+                                    flex
+                                    w-full
+                                    items-center
+                                    gap-2
+                                    border-t border-sat-border
+                                    px-3
+                                    py-2.5
+                                    text-left
+                                    transition-colors
+                                    hover:bg-sat-panel
+                                  "
+                                  >
+                                    <Download className="h-3.5 w-3.5 text-sat-stable" />
+
+                                    <span>
+                                      <span className="block font-mono text-[8px] font-bold text-sat-text">
+                                        DOWNLOAD BRIEF (HTML)
+                                      </span>
+
+                                      <span className="block font-sans text-[8px] text-sat-dim">
+                                        Standalone brief document
                                       </span>
                                     </span>
                                   </button>
@@ -2020,21 +1694,6 @@ const downloadFile = (
   anchor.remove();
 
   URL.revokeObjectURL(url);
-};
-
-/* ================================================================
-   HTML ESCAPE
-================================================================ */
-
-const escapeHtml = (
-  value: string
-): string => {
-  return value
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#039;');
 };
 
 export default HistoryView;

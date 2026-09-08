@@ -1,5 +1,9 @@
 import React, { useMemo, useState } from 'react';
-import type { AnalysisResult } from '../../types/satquery';
+import type { AnalysisResult, Observation } from '../../types/satquery';
+import {
+  printIntelligenceBrief,
+  downloadIntelligenceBriefHtml,
+} from '../../utils/intelligenceBriefGenerator';
 import {
   CheckCircle2,
   MapPin,
@@ -23,6 +27,7 @@ import {
 
 interface ResultPanelProps {
   result: AnalysisResult;
+  observations?: Observation[];
   selectedRegionId: string | null;
   onSelectRegion: (regionId: string | null) => void;
   onOpenReplay: () => void;
@@ -31,6 +36,7 @@ interface ResultPanelProps {
 
 export const ResultPanel: React.FC<ResultPanelProps> = ({
   result,
+  observations = [],
   selectedRegionId,
   onSelectRegion,
   onOpenReplay,
@@ -98,9 +104,6 @@ export const ResultPanel: React.FC<ResultPanelProps> = ({
     [result.executionSummary?.telemetryId]
   );
 
-  const reportObservationCount =
-    result.executionSummary?.inputs?.length || 0;
-
   const showExportFeedback = (message: string) => {
     setExportFeedback(message);
     window.setTimeout(() => setExportFeedback(null), 2400);
@@ -167,544 +170,28 @@ export const ResultPanel: React.FC<ResultPanelProps> = ({
   };
 
   const exportIntelligenceBrief = () => {
-    const evidence = (result.evidence ?? []) as unknown as ExportEvidence[];
-    const printableWindow = window.open(
-      '',
-      '_blank',
-      'noopener,noreferrer,width=1100,height=850'
-    );
-
-    if (!printableWindow) {
-      showExportFeedback('Popup blocked · allow popups to export PDF');
-      return;
-    }
-
-    const evidenceRows = evidence.length
-      ? evidence
-        .map(
-          (region, index) => `
-              <tr>
-                <td class="mono">${String(index + 1).padStart(2, '0')}</td>
-                <td><strong>${escapeHtml(region.label)}</strong><br />
-                  <span class="muted">${escapeHtml(region.description)}</span>
-                </td>
-                <td class="mono">${escapeHtml(region.areaEstimate)}</td>
-                <td class="mono">${Math.max(
-            0,
-            Math.min(100, Number(region.confidence) || 0)
-          )}%</td>
-              </tr>
-            `
-        )
-        .join('')
-      : `
-          <tr>
-            <td colspan="4" class="empty">
-              No spatial evidence returned for this analysis.
-            </td>
-          </tr>
-        `;
-
-    const inputRows = (result.executionSummary?.inputs ?? [])
-      .map(
-        (input, index) => `
-          <div class="dataset">
-            <span class="index">0${index + 1}</span>
-            <span>${escapeHtml(typeof input === 'string' ? input : (input?.filename || input?.name || ''))}</span>
-          </div>
-        `
-      )
-      .join('');
-
-    const modelRows = (result.executionSummary?.modelsUsed ?? [])
-      .map(
-        (model) => `
-          <span class="chip">${escapeHtml(model)}</span>
-        `
-      )
-      .join('');
-
-    const changeMetric = result.changePercentage
-      ? `
-        <div class="metric change">
-          <span>CHANGE DETECTED</span>
-          <strong>${escapeHtml(result.changePercentage)}</strong>
-        </div>
-      `
-      : '';
-
-    printableWindow.document.write(`
-      <!doctype html>
-      <html>
-        <head>
-          <meta charset="utf-8" />
-          <title>SatQuery Intelligence Brief — ${escapeHtml(executionId)}</title>
-          <style>
-            @page {
-              size: A4;
-              margin: 14mm;
-            }
-
-            :root {
-              color-scheme: light;
-              --ink: #1c1814;
-              --muted: #6e665c;
-              --dim: #8a8175;
-              --line: #d8cdbd;
-              --panel: #f2ece2;
-              --paper: #fffdf8;
-              --blue: #1677a8;
-              --green: #08745d;
-              --amber: #c66a12;
-            }
-
-            * { box-sizing: border-box; }
-
-            body {
-              margin: 0;
-              background: var(--paper);
-              color: var(--ink);
-              font-family: Inter, Arial, sans-serif;
-              font-size: 11px;
-              line-height: 1.5;
-            }
-
-            .page {
-              max-width: 900px;
-              margin: 0 auto;
-            }
-
-            .header {
-              display: flex;
-              align-items: flex-start;
-              justify-content: space-between;
-              gap: 30px;
-              padding-bottom: 18px;
-              border-bottom: 2px solid var(--ink);
-            }
-
-            .eyebrow,
-            .section-title,
-            .mono,
-            .label,
-            .exec {
-              font-family: "JetBrains Mono", "Courier New", monospace;
-            }
-
-            .eyebrow {
-              color: var(--blue);
-              font-size: 9px;
-              font-weight: 800;
-              letter-spacing: .16em;
-              text-transform: uppercase;
-            }
-
-            h1 {
-              margin: 7px 0 3px;
-              font-size: 25px;
-              line-height: 1.12;
-              letter-spacing: -.025em;
-            }
-
-            .subtitle {
-              color: var(--muted);
-              font-size: 10px;
-            }
-
-            .exec {
-              min-width: 160px;
-              text-align: right;
-              color: var(--dim);
-              font-size: 8px;
-            }
-
-            .exec strong {
-              display: block;
-              margin-top: 3px;
-              color: var(--ink);
-              font-size: 11px;
-            }
-
-            .section {
-              margin-top: 22px;
-              break-inside: avoid;
-            }
-
-            .section-title {
-              display: flex;
-              justify-content: space-between;
-              gap: 12px;
-              padding-bottom: 7px;
-              border-bottom: 1px solid var(--line);
-              color: var(--dim);
-              font-size: 8px;
-              font-weight: 800;
-              letter-spacing: .12em;
-              text-transform: uppercase;
-            }
-
-            .question {
-              margin-top: 11px;
-              padding: 13px 15px;
-              background: var(--panel);
-              border-left: 3px solid var(--blue);
-              font-size: 13px;
-              line-height: 1.55;
-            }
-
-            .grid {
-              display: grid;
-              grid-template-columns: repeat(3, 1fr);
-              gap: 9px;
-              margin-top: 10px;
-            }
-
-            .card {
-              padding: 11px;
-              border: 1px solid var(--line);
-              background: var(--paper);
-            }
-
-            .label {
-              color: var(--dim);
-              font-size: 7px;
-              font-weight: 700;
-              letter-spacing: .08em;
-              text-transform: uppercase;
-            }
-
-            .value {
-              margin-top: 4px;
-              font-size: 10px;
-              font-weight: 700;
-            }
-
-            .confidence {
-              margin-top: 11px;
-            }
-
-            .confidence-head {
-              display: flex;
-              justify-content: space-between;
-              font-family: monospace;
-              font-size: 9px;
-              font-weight: 700;
-            }
-
-            .bar {
-              height: 7px;
-              margin-top: 6px;
-              overflow: hidden;
-              background: #eae2d5;
-            }
-
-            .bar > div {
-              width: ${confidence}%;
-              height: 100%;
-              background: var(--green);
-            }
-
-            .metric {
-              display: flex;
-              align-items: center;
-              justify-content: space-between;
-              margin-top: 10px;
-              padding: 9px 11px;
-              border: 1px solid var(--line);
-              background: var(--panel);
-              font-family: monospace;
-              font-size: 8px;
-              font-weight: 700;
-            }
-
-            .metric strong {
-              color: var(--amber);
-              font-size: 13px;
-            }
-
-            table {
-              width: 100%;
-              margin-top: 9px;
-              border-collapse: collapse;
-            }
-
-            th {
-              padding: 7px;
-              background: var(--panel);
-              color: var(--dim);
-              font-family: monospace;
-              font-size: 7px;
-              text-align: left;
-              text-transform: uppercase;
-            }
-
-            td {
-              padding: 9px 7px;
-              border-bottom: 1px solid var(--line);
-              vertical-align: top;
-              font-size: 9px;
-            }
-
-            .muted {
-              color: var(--muted);
-              font-size: 8px;
-            }
-
-            .empty {
-              color: var(--dim);
-              text-align: center;
-              font-family: monospace;
-            }
-
-            .dataset {
-              display: flex;
-              gap: 10px;
-              padding: 7px 0;
-              border-bottom: 1px solid #eae2d5;
-              font-family: monospace;
-              font-size: 8px;
-            }
-
-            .index {
-              color: var(--blue);
-              font-weight: 800;
-            }
-
-            .chips {
-              display: flex;
-              flex-wrap: wrap;
-              gap: 5px;
-              margin-top: 8px;
-            }
-
-            .chip {
-              display: inline-block;
-              padding: 4px 6px;
-              border: 1px solid var(--line);
-              background: var(--panel);
-              font-family: monospace;
-              font-size: 7px;
-            }
-
-            .trace {
-              margin-top: 8px;
-            }
-
-            .trace-row {
-              display: flex;
-              gap: 10px;
-              padding: 7px 0;
-              border-bottom: 1px solid #eae2d5;
-            }
-
-            .trace-dot {
-              width: 12px;
-              height: 12px;
-              flex: 0 0 12px;
-              margin-top: 1px;
-              border-radius: 50%;
-              background: var(--green);
-            }
-
-            .trace-name {
-              font-family: monospace;
-              font-size: 8px;
-              font-weight: 800;
-              text-transform: uppercase;
-            }
-
-            .trace-description {
-              margin-top: 2px;
-              color: var(--muted);
-              font-size: 8px;
-            }
-
-            .footer {
-              display: flex;
-              justify-content: space-between;
-              gap: 20px;
-              margin-top: 28px;
-              padding-top: 10px;
-              border-top: 1px solid var(--line);
-              color: var(--dim);
-              font-family: monospace;
-              font-size: 7px;
-            }
-
-            .no-print {
-              margin-top: 20px;
-              padding: 10px;
-              background: var(--panel);
-              color: var(--muted);
-              font-family: monospace;
-              font-size: 8px;
-            }
-
-            @media print {
-              .no-print { display: none; }
-            }
-          </style>
-        </head>
-
-        <body>
-          <main class="page">
-            <header class="header">
-              <div>
-                <div class="eyebrow">SATQUERY AI</div>
-                <h1>Earth Observation Intelligence Brief</h1>
-                <div class="subtitle">
-                  Evidence-grounded · auditable · machine-assisted geospatial analysis
-                </div>
-              </div>
-
-              <div class="exec">
-                EXECUTION ID
-                <strong>${escapeHtml(executionId)}</strong>
-                <div style="margin-top:7px">
-                  ${escapeHtml(result.executionSummary?.telemetryId || 'TELEMETRY N/A')}
-                </div>
-              </div>
-            </header>
-
-            <section class="section">
-              <div class="section-title">
-                <span>Analysis request</span>
-                <span>${escapeHtml(result.task)}</span>
-              </div>
-
-              <div class="question">
-                "${escapeHtml(result.answer || result.headline)}"
-              </div>
-
-              <div class="grid">
-                <div class="card">
-                  <div class="label">Analysis type</div>
-                  <div class="value">${escapeHtml(result.task)}</div>
-                </div>
-
-                <div class="card">
-                  <div class="label">Input datasets</div>
-                  <div class="value">${reportObservationCount || 'N/A'}</div>
-                </div>
-
-                <div class="card">
-                  <div class="label">Result status</div>
-                  <div class="value">${escapeHtml(isVerified ? 'VERIFIED' : 'NOT VERIFIED')}</div>
-                </div>
-              </div>
-            </section>
-
-            <section class="section">
-              <div class="section-title">
-                <span>Confidence assessment</span>
-                <span>${confidence}% · ${escapeHtml(confidenceLabel)}</span>
-              </div>
-
-              <div class="confidence">
-                <div class="confidence-head">
-                  <span>MODEL / PIPELINE CONFIDENCE</span>
-                  <span>${confidence}/100</span>
-                </div>
-                <div class="bar"><div></div></div>
-              </div>
-
-              ${changeMetric}
-            </section>
-
-            <section class="section">
-              <div class="section-title">
-                <span>Evidence regions</span>
-                <span>${evidenceCount} region(s)</span>
-              </div>
-
-              <table>
-                <thead>
-                  <tr>
-                    <th>#</th>
-                    <th>Region / finding</th>
-                    <th>Area</th>
-                    <th>Confidence</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${evidenceRows}
-                </tbody>
-              </table>
-            </section>
-
-            <section class="section">
-              <div class="section-title">
-                <span>Input observations</span>
-                <span>${reportObservationCount || 0}</span>
-              </div>
-
-              <div>
-                ${inputRows || '<div class="dataset">No input dataset metadata returned.</div>'}
-              </div>
-            </section>
-
-            <section class="section">
-              <div class="section-title">
-                <span>Specialist models</span>
-                <span>EXECUTION METADATA</span>
-              </div>
-
-              <div class="chips">
-                ${modelRows || '<span class="chip">MODEL METADATA NOT AVAILABLE</span>'}
-              </div>
-            </section>
-
-            <section class="section">
-              <div class="section-title">
-                <span>Observable execution workflow</span>
-                <span>AUDIT TRACE</span>
-              </div>
-
-              <div class="trace">
-                ${[
-        ['01', 'Understanding request', 'Natural-language intent interpreted.'],
-        ['02', 'Checking observations', 'Selected observations validated.'],
-        ['03', 'Determining analysis type', 'Analysis category determined from request and inputs.'],
-        ['04', 'Selecting specialist model', 'Relevant specialist capability selected by the orchestration layer.'],
-        ['05', 'Running analysis', 'Analysis executed against the supplied Earth observation inputs.'],
-        ['06', 'Generating evidence', 'Observable supporting evidence prepared for inspection.'],
-        ['07', 'Preparing result', 'Answer, confidence and audit metadata assembled.'],
-      ].map(
-        ([number, name, description]) => `
-                    <div class="trace-row">
-                      <div class="trace-dot"></div>
-                      <div>
-                        <div class="trace-name">${number} · ${escapeHtml(name)}</div>
-                        <div class="trace-description">${escapeHtml(description)}</div>
-                      </div>
-                    </div>
-                  `
-      ).join('')}
-              </div>
-            </section>
-
-            <footer class="footer">
-              <span>SATQUERY AI · EARTH OBSERVATION INTELLIGENCE</span>
-              <span>GENERATED ${new Date().toISOString()}</span>
-            </footer>
-
-            <div class="no-print">
-              Print dialog opened by SatQuery. Choose "Save as PDF" to create the final intelligence brief.
-            </div>
-          </main>
-        </body>
-      </html>
-    `);
-
-    printableWindow.document.close();
-    printableWindow.focus();
-
-    window.setTimeout(() => {
-      printableWindow.print();
-    }, 400);
-
     setIsExportMenuOpen(false);
-    showExportFeedback('Intelligence brief ready · Print to PDF');
+    const success = printIntelligenceBrief(result, {
+      executionId,
+      observations,
+      queryText: result.queryText,
+    });
+
+    if (success) {
+      showExportFeedback('Intelligence brief opened · Ready to print / save as PDF');
+    } else {
+      showExportFeedback('Intelligence brief downloaded as HTML');
+    }
+  };
+
+  const downloadBriefAsHtml = () => {
+    setIsExportMenuOpen(false);
+    downloadIntelligenceBriefHtml(result, {
+      executionId,
+      observations,
+      queryText: result.queryText,
+    });
+    showExportFeedback('Intelligence brief downloaded');
   };
 
   const copyAuditId = async () => {
@@ -938,6 +425,32 @@ export const ResultPanel: React.FC<ResultPanelProps> = ({
                       </div>
                       <div className="mt-0.5 font-sans text-[9px] leading-relaxed text-sat-dim">
                         Print-ready scientific report · PDF
+                      </div>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={downloadBriefAsHtml}
+                    className="
+                      flex w-full items-start gap-3
+                      border-b border-sat-border
+                      px-3 py-3 text-left
+                      transition-colors
+                      hover:bg-sat-panel
+                    "
+                  >
+                    <div className="mt-0.5 rounded border border-sat-stable/30 bg-sat-stable/10 p-1.5 text-sat-stable">
+                      <Download className="h-3.5 w-3.5" />
+                    </div>
+
+                    <div className="min-w-0">
+                      <div className="font-mono text-[9px] font-bold uppercase text-sat-text">
+                        Download Brief (HTML)
+                      </div>
+                      <div className="mt-0.5 font-sans text-[9px] leading-relaxed text-sat-dim">
+                        Standalone interactive intelligence report
                       </div>
                     </div>
                   </button>
@@ -1936,15 +1449,4 @@ const sanitizeFilename = (
     .replace(/[^a-z0-9_-]+/gi, '-')
     .replace(/^-+|-+$/g, '')
     .slice(0, 80) || 'analysis';
-};
-
-const escapeHtml = (
-  value: string
-): string => {
-  return String(value)
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#039;');
 };

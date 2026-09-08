@@ -1001,6 +1001,71 @@ def analyze(req: AnalyzeRequest):
 
 
 # ============================================================
+# REPORTS & PDF INTELLIGENCE BRIEFS
+# ============================================================
+
+from fastapi.responses import HTMLResponse, Response
+from app.utils.report_generator import generate_intelligence_brief_html
+
+
+class ReportBriefRequest(BaseModel):
+    result: Dict[str, Any]
+    query_text: Optional[str] = ""
+    execution_id: Optional[str] = ""
+    observations: Optional[List[Dict[str, Any]]] = None
+
+
+@app.post("/api/reports/brief", response_class=HTMLResponse)
+def get_report_brief_html(payload: ReportBriefRequest):
+    html_content = generate_intelligence_brief_html(
+        result=payload.result,
+        query_text=payload.query_text or "",
+        execution_id=payload.execution_id or "",
+        observations=payload.observations or []
+    )
+    return HTMLResponse(content=html_content)
+
+
+@app.get("/api/reports/brief/{history_id}", response_class=HTMLResponse)
+def get_history_report_brief_html(history_id: str):
+    # Find in in-memory history if present
+    found_entry = None
+    for entry in ANALYSIS_HISTORY:
+        if entry.get("id") == history_id or str(entry.get("timestamp")) == history_id:
+            found_entry = entry
+            break
+
+    if found_entry:
+        full_res = found_entry.get("full_result", {})
+        html_content = generate_intelligence_brief_html(
+            result=full_res,
+            query_text=found_entry.get("query", ""),
+            execution_id=history_id
+        )
+        return HTMLResponse(content=html_content)
+
+    raise HTTPException(status_code=404, detail="Historical execution record not found")
+
+
+@app.post("/api/reports/download")
+def download_report_brief(payload: ReportBriefRequest):
+    html_content = generate_intelligence_brief_html(
+        result=payload.result,
+        query_text=payload.query_text or "",
+        execution_id=payload.execution_id or "",
+        observations=payload.observations or []
+    )
+    exec_id = payload.execution_id or f"SQ-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
+    return Response(
+        content=html_content,
+        media_type="text/html",
+        headers={
+            "Content-Disposition": f'attachment; filename="satquery-brief-{exec_id}.html"'
+        }
+    )
+
+
+# ============================================================
 # HISTORY
 # ============================================================
 

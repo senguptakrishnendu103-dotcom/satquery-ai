@@ -1477,21 +1477,20 @@ export function App() {
                     result={
                       activeResult
                     }
-
+                    observations={
+                      observations
+                    }
                     selectedRegionId={
                       selectedRegionId
                     }
-
                     onSelectRegion={
                       setSelectedRegionId
                     }
-
                     onOpenReplay={() =>
                       setIsReplayOpen(
                         true
                       )
                     }
-
                     onFollowUpQuery={
                       handleExecuteQuery
                     }
