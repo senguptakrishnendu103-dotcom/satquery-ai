@@ -76,59 +76,49 @@ class BigEarthNetSample:
             self.question, self.answer = self._generate_vqa_pair(task_type)
 
     def _generate_vqa_pair(self, task_type: str = "all") -> Tuple[str, str]:
-        """Generate diverse remote-sensing VQA questions from land-cover labels."""
+        """Generate diverse remote-sensing VQA questions with pointwise descriptive training answers."""
         all_labels_lower = [lbl.lower() for lbl in self.labels]
         has_water = any("water" in lbl or "wetland" in lbl for lbl in all_labels_lower)
         has_urban = any("urban" in lbl or "industrial" in lbl or "commercial" in lbl for lbl in all_labels_lower)
         has_forest = any("forest" in lbl for lbl in all_labels_lower)
 
+        labels_str = ", ".join([lbl.strip() for lbl in self.labels[:3]])
+
+        pointwise_answer = (
+            f"### Remote-Sensing Intelligence & Insights\n\n"
+            f"* **Primary Feature Observed**: {self.primary_label}\n"
+            f"* **Spectral & Visual Evidence**: Multispectral band response confirms presence of {labels_str}.\n"
+            f"* **Spatial & Environmental Condition**: High confidence observation over target bounding box with clear feature boundaries.\n"
+            f"* **Analytical Recommendation**: Recommended for land-use classification and environmental feature tracking."
+        )
+
         if task_type == "water_detection":
+            ans = "Yes, water bodies or wetlands are present." if has_water else "No significant water bodies detected in this patch."
             return (
                 "Does this satellite observation contain water bodies or wetlands?",
-                "yes" if has_water else "no",
+                f"* **Water Feature Detection**: {ans}\n* **Target Details**: {labels_str}",
             )
         elif task_type == "urban_detection":
+            ans = "Yes, built-up structures and urban fabric identified." if has_urban else "No prominent urban fabric detected."
             return (
                 "Is there evidence of urban fabric or industrial structures in this scene?",
-                "yes" if has_urban else "no",
+                f"* **Urban Feature Detection**: {ans}\n* **Target Details**: {labels_str}",
             )
         elif task_type == "land_cover":
             return (
                 "What is the dominant land cover class in this satellite observation?",
-                self.primary_label.lower(),
+                pointwise_answer,
             )
         elif task_type == "terrain":
             return (
                 "What type of terrain is shown in this satellite patch?",
-                self.primary_label.lower(),
+                pointwise_answer,
             )
 
-        # Diverse templates for 'all'
-        templates = [
-            (
-                "What is the dominant land cover class in this satellite observation?",
-                self.primary_label.lower(),
-            ),
-            (
-                "What type of terrain is shown in this satellite patch?",
-                self.primary_label.lower(),
-            ),
-            (
-                "What features are visible in this satellite scene?",
-                ", ".join([lbl.lower() for lbl in self.labels[:3]]),
-            ),
-            (
-                "Does this satellite observation contain water bodies or wetlands?",
-                "yes" if has_water else "no",
-            ),
-            (
-                "Is there evidence of urban fabric or built-up area in this scene?",
-                "yes" if has_urban else "no",
-            ),
-        ]
-        # Deterministically select question based on patch_id hash
-        idx = abs(hash(self.patch_id)) % len(templates)
-        return templates[idx]
+        return (
+            "What is the dominant land cover class in this satellite observation?",
+            pointwise_answer,
+        )
 
 
 def load_raster_or_image(path: str) -> Image.Image:

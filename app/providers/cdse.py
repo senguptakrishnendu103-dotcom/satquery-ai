@@ -511,8 +511,10 @@ class CDSEProvider(SatelliteDataProvider):
                 cached=True,
             )
 
-        bbox = [77.45, 12.85, 77.75, 13.15]
+        bbox = [77.50, 12.90, 77.65, 13.05]
         time_from = "2024-01-01T00:00:00Z"
+        time_to = "2024-12-31T23:59:59Z"
+
         try:
             prod_meta = self.get_product(clean_id, collection=collection)
             if prod_meta and prod_meta.geometry:

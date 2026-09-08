@@ -1082,7 +1082,7 @@ export const ResultPanel: React.FC<ResultPanelProps> = ({
                   {result.headline}
                 </h2>
 
-                <p
+                <div
                   className="
                     mt-3
                     text-xs
@@ -1090,8 +1090,66 @@ export const ResultPanel: React.FC<ResultPanelProps> = ({
                     text-sat-muted
                   "
                 >
-                  {result.answer}
-                </p>
+                  {(() => {
+                    const answer = result.answer || '';
+                    const lines = answer.split('\n').filter((l: string) => l.trim() !== '');
+                    return lines.map((line: string, idx: number) => {
+                      // ### heading
+                      if (line.trim().startsWith('### ')) {
+                        return (
+                          <h3
+                            key={idx}
+                            className="
+                              font-mono text-[11px] font-bold uppercase
+                              tracking-wider text-sat-accent mt-1 mb-2
+                            "
+                          >
+                            {line.trim().replace(/^###\s*/, '')}
+                          </h3>
+                        );
+                      }
+                      // * bullet point
+                      if (line.trim().startsWith('* ')) {
+                        const content = line.trim().replace(/^\*\s*/, '');
+                        // Parse **bold** segments
+                        const parts = content.split(/(\*\*[^*]+\*\*)/g);
+                        return (
+                          <div key={idx} className="flex gap-2 mt-1.5 items-start">
+                            <span className="text-sat-accent mt-0.5 shrink-0">•</span>
+                            <span>
+                              {parts.map((part: string, pidx: number) => {
+                                if (part.startsWith('**') && part.endsWith('**')) {
+                                  return (
+                                    <strong key={pidx} className="text-sat-text font-semibold">
+                                      {part.slice(2, -2)}
+                                    </strong>
+                                  );
+                                }
+                                return <span key={pidx}>{part}</span>;
+                              })}
+                            </span>
+                          </div>
+                        );
+                      }
+                      // Regular line — also parse **bold**
+                      const parts = line.split(/(\*\*[^*]+\*\*)/g);
+                      return (
+                        <p key={idx} className="mt-1">
+                          {parts.map((part: string, pidx: number) => {
+                            if (part.startsWith('**') && part.endsWith('**')) {
+                              return (
+                                <strong key={pidx} className="text-sat-text font-semibold">
+                                  {part.slice(2, -2)}
+                                </strong>
+                              );
+                            }
+                            return <span key={pidx}>{part}</span>;
+                          })}
+                        </p>
+                      );
+                    });
+                  })()}
+                </div>
 
                 {/* Change metric */}
                 {result.changePercentage && (
