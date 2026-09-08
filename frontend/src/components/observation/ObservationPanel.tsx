@@ -23,7 +23,6 @@ import {
   Wind,
   HelpCircle,
 } from 'lucide-react';
-import { SatelliteSearchModal } from './SatelliteSearchModal';
 import { SIHResourcesModal } from './SIHResourcesModal';
 import { satQueryService } from '../../services/satQueryService';
 import type { SIHResourceItem } from '../../types/satquery';
@@ -171,10 +170,10 @@ export const ObservationPanel: React.FC<ObservationPanelProps> = ({
   onAddObservation,
   onObservationAdded,
   onSelectDemoScenario,
-  initialSearchBBox,
-  isSearchModalOpen: propIsSearchModalOpen,
+  initialSearchBBox: _initialSearchBBox,
+  isSearchModalOpen: _propIsSearchModalOpen,
   onOpenSearchModal,
-  onCloseSearchModal,
+  onCloseSearchModal: _onCloseSearchModal,
 }) => {
   const [selectedModality] =
     useState<ModalityType>('OPTICAL');
@@ -187,17 +186,11 @@ export const ObservationPanel: React.FC<ObservationPanelProps> = ({
   const [expandedObservationId, setExpandedObservationId] =
     useState<string | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const [internalIsSearchModalOpen, setInternalIsSearchModalOpen] = useState(false);
-  const isSearchModalOpen = propIsSearchModalOpen !== undefined ? propIsSearchModalOpen : internalIsSearchModalOpen;
+  const [_, setInternalIsSearchModalOpen] = useState(false);
 
   const handleOpenSearchModal = () => {
     if (onOpenSearchModal) onOpenSearchModal();
     else setInternalIsSearchModalOpen(true);
-  };
-
-  const handleCloseSearchModal = () => {
-    if (onCloseSearchModal) onCloseSearchModal();
-    else setInternalIsSearchModalOpen(false);
   };
 
   const [isSIHModalOpen, setIsSIHModalOpen] = useState(false);
@@ -558,18 +551,6 @@ export const ObservationPanel: React.FC<ObservationPanelProps> = ({
         )}
 
         {/* Modals & File Input */}
-        <SatelliteSearchModal
-          isOpen={isSearchModalOpen}
-          onClose={handleCloseSearchModal}
-          initialBBox={initialSearchBBox}
-          onObservationAdded={(obs) => {
-            if (onObservationAdded) {
-              onObservationAdded(obs);
-            } else {
-              onToggleObservation(obs.id);
-            }
-          }}
-        />
 
         <SIHResourcesModal
           isOpen={isSIHModalOpen}

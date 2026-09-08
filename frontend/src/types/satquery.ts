@@ -40,6 +40,7 @@ export type ObservationSourceType =
   | 'upload'
   | 'web_fetch'
   | 'bhoonidhi'
+  | 'cdse'
   | 'sih_resource'
   | 'demo'
   | 'sample'

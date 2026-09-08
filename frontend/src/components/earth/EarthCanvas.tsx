@@ -269,6 +269,22 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
 
   const activeObservation = obsBefore;
 
+  const getObsImageUrl = (obs: Observation | null) => {
+    if (!obs) return '';
+    const candidate = obs.imageUrl || (obs as any).url || (obs as any).image_url || obs.thumbnailUrl;
+    if (!candidate) return '';
+    return candidate.startsWith('/static')
+      ? `${window.location.origin}${candidate}`
+      : candidate;
+  };
+
+  // Automatically switch main screen display to SCENE_INSPECT mode when an image is selected or loaded
+  useEffect(() => {
+    if (activeObservation) {
+      setCanvasViewMode('SCENE_INSPECT');
+    }
+  }, [activeObservation?.id]);
+
   // Sync external selectedAOI
   useEffect(() => {
     if (selectedAOI) {
@@ -543,6 +559,54 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
         ],
         { padding: 100, maxZoom: 12, duration: 1200 }
       );
+
+      // Dynamically project active observation image overlay onto geographic map
+      const rawImgUrl = activeObservation.imageUrl || (activeObservation as any).url || (activeObservation as any).image_url;
+      if (rawImgUrl) {
+        const fullImgUrl = rawImgUrl.startsWith('/static')
+          ? `${window.location.origin}${rawImgUrl}`
+          : rawImgUrl;
+
+        try {
+          if (map.getLayer('obs-raster-layer')) {
+            map.removeLayer('obs-raster-layer');
+          }
+          if (map.getSource('obs-raster-source')) {
+            map.removeSource('obs-raster-source');
+          }
+
+          map.addSource('obs-raster-source', {
+            type: 'image',
+            url: fullImgUrl,
+            coordinates: [
+              [minLon, maxLat],
+              [maxLon, maxLat],
+              [maxLon, minLat],
+              [minLon, minLat],
+            ],
+          });
+
+          map.addLayer(
+            {
+              id: 'obs-raster-layer',
+              type: 'raster',
+              source: 'obs-raster-source',
+              paint: {
+                'raster-opacity': 0.9,
+                'raster-fade-duration': 300,
+              },
+            },
+            map.getLayer('obs-footprint-stroke') ? 'obs-footprint-stroke' : undefined
+          );
+        } catch (overlayErr) {
+          console.warn('Could not add MapLibre raster overlay:', overlayErr);
+        }
+      }
+    } else {
+      try {
+        if (map.getLayer('obs-raster-layer')) map.removeLayer('obs-raster-layer');
+        if (map.getSource('obs-raster-source')) map.removeSource('obs-raster-source');
+      } catch (err) {}
     }
   }, [activeObservation]);
 
@@ -702,10 +766,23 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
         const maxLat = Math.max(p1.lat, p2.lat);
 
         if (Math.abs(maxLon - minLon) > 0.001 && Math.abs(maxLat - minLat) > 0.001) {
-          const newBbox: [number, number, number, number] = [minLon, minLat, maxLon, maxLat];
+          const clampedMinLon = Math.max(-180, Math.min(180, minLon));
+          const clampedMaxLon = Math.max(-180, Math.min(180, maxLon));
+          const clampedMinLat = Math.max(-90, Math.min(90, minLat));
+          const clampedMaxLat = Math.max(-90, Math.min(90, maxLat));
+
+          const newBbox: [number, number, number, number] = [
+            Number(clampedMinLon.toFixed(4)),
+            Number(clampedMinLat.toFixed(4)),
+            Number(clampedMaxLon.toFixed(4)),
+            Number(clampedMaxLat.toFixed(4)),
+          ];
           setLocalAOI(newBbox);
           onSelectAOI?.(newBbox);
           renderAoiBox(mapRef.current, newBbox);
+          if (onOpenSatelliteSearch) {
+            onOpenSatelliteSearch(newBbox);
+          }
         }
       } catch (err) {
         console.error('AOI unproject error:', err);
@@ -983,12 +1060,12 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
           >
             {/* BASE IMAGE */}
             {visibleLayerIds.includes('base') && (
-              <div className="absolute inset-0 overflow-hidden rounded-lg bg-sat-surface">
-                {(compareMode === 'AFTER' && isMultiObs ? obsAfter.imageUrl : obsBefore.imageUrl) ? (
+              <div className="absolute inset-0 overflow-hidden rounded-lg bg-sat-surface flex items-center justify-center">
+                {getObsImageUrl(compareMode === 'AFTER' && isMultiObs ? obsAfter : obsBefore) ? (
                   <img
-                    src={compareMode === 'AFTER' && isMultiObs ? obsAfter.imageUrl : obsBefore.imageUrl}
+                    src={getObsImageUrl(compareMode === 'AFTER' && isMultiObs ? obsAfter : obsBefore)}
                     alt="Satellite observation base"
-                    className="h-full w-full object-cover"
+                    className="h-full w-full object-contain bg-black/90"
                     draggable={false}
                     onError={(e) => {
                       (e.currentTarget as HTMLElement).style.display = 'none';
@@ -1000,7 +1077,7 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
 
                 <div
                   className={`canvas-preview-fallback absolute inset-0 flex flex-col items-center justify-center p-4 text-center bg-sat-bg/90 ${
-                    (compareMode === 'AFTER' && isMultiObs ? obsAfter.imageUrl : obsBefore.imageUrl) ? 'hidden' : 'flex'
+                    getObsImageUrl(compareMode === 'AFTER' && isMultiObs ? obsAfter : obsBefore) ? 'hidden' : 'flex'
                   }`}
                 >
                   <Satellite className="h-8 w-8 text-sat-dim/50 mb-2" />
@@ -1020,9 +1097,9 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
                 }}
               >
                 <img
-                  src={obsAfter.imageUrl}
+                  src={getObsImageUrl(obsAfter)}
                   alt="Satellite observation target"
-                  className="h-full w-full object-cover"
+                  className="h-full w-full object-contain bg-black/90"
                   draggable={false}
                 />
                 <div

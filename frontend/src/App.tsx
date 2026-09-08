@@ -30,6 +30,7 @@ import { AnalysisReplayModal } from './components/replay/AnalysisReplayModal';
 import { HistoryView } from './components/history/HistoryView';
 import { DemoSelectorModal } from './components/demo/DemoSelectorModal';
 import { SettingsModal } from './components/settings/SettingsModal';
+import { SatelliteSearchModal } from './components/observation/SatelliteSearchModal';
 import { LiveSpaceBackground } from './components/background/LiveSpaceBackground';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
 
@@ -426,7 +427,6 @@ export function App() {
 
   const handleOpenSatelliteSearchWithAOI = (bbox: [number, number, number, number]) => {
     setSelectedAOI(bbox);
-    setIsObservationDrawerOpen(true);
     setIsSearchModalOpen(true);
   };
 
@@ -1626,6 +1626,17 @@ export function App() {
             false
           )
         }
+      />
+
+      {/* ====================================================
+          SATELLITE SEARCH
+      ==================================================== */}
+
+      <SatelliteSearchModal
+        isOpen={isSearchModalOpen}
+        onClose={() => setIsSearchModalOpen(false)}
+        initialBBox={selectedAOI}
+        onObservationAdded={(obs) => handleSIHObservationLoaded(obs)}
       />
 
     </div>

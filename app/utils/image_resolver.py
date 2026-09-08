@@ -250,9 +250,14 @@ class ImageResolver:
         """
         p = Path(raster_path).resolve()
         suffix = p.suffix.lower()
+        static_base = Path(STATIC_DIR).resolve()
 
         if suffix in [".png", ".jpg", ".jpeg", ".webp"]:
-            return f"/static/uploads/{p.name}"
+            try:
+                rel_path = p.relative_to(static_base)
+                return f"/static/{rel_path.as_posix()}"
+            except ValueError:
+                return f"/static/uploads/{p.name}"
 
         out_dir = Path(output_dir) if output_dir else Path(UPLOAD_DIR)
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -264,10 +269,19 @@ class ImageResolver:
             try:
                 rgb_img = ImageResolver._load_raster_as_rgb(str(p), {})
                 rgb_img.save(str(preview_path), format="PNG")
-            except Exception:
-                return f"/static/uploads/{p.name}"
+            except Exception as exc:
+                logger.warning(f"Could not generate PNG preview for {p}: {exc}")
+                try:
+                    rel_path = p.relative_to(static_base)
+                    return f"/static/{rel_path.as_posix()}"
+                except ValueError:
+                    return f"/static/uploads/{p.name}"
 
-        return f"/static/uploads/{preview_name}"
+        try:
+            rel_path = preview_path.resolve().relative_to(static_base)
+            return f"/static/{rel_path.as_posix()}"
+        except ValueError:
+            return f"/static/uploads/{preview_name}"
 
     @staticmethod
     def save_mask_overlay(mask_arr: np.ndarray, prefix: str = "overlay") -> str:

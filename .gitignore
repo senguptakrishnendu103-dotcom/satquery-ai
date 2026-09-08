@@ -31,6 +31,7 @@ app/static/uploads/*.png
 app/static/uploads/*.jpg
 app/static/uploads/*.geotiff
 app/static/uploads/cdse_products/
+app/static/uploads/bhoonidhi_downloads/
 app/static/uploads/test_*/
 app/static/uploads/real_validation/
 app/static/uploads/sih_materialized/

@@ -11,6 +11,9 @@ import {
   Loader2,
   Database,
   Radio,
+  ChevronDown,
+  ChevronUp,
+  Sliders,
 } from 'lucide-react';
 import { satQueryService } from '../../services/satQueryService';
 import type { Observation, SatelliteProviderInfo } from '../../types/satquery';
@@ -49,6 +52,13 @@ const PROVIDER_SPECIFIC_FALLBACK_COLLECTIONS: Record<string, CollectionOption[]>
     { id: 'RISAT-1', label: 'RISAT-1 — RISAT-1 (C-band SAR)' },
     { id: 'EOS-04', label: 'EOS-04 — EOS-04 / RISAT-1A (Radar Imaging)' },
     { id: 'EOS-06', label: 'EOS-06 — EOS-06 / Oceansat-3 (OCM / SSTM)' },
+  ],
+  cdse: [
+    { id: 'SENTINEL-2', label: 'SENTINEL-2 — Sentinel-2 MSI (Level-1C / Level-2A Optical)' },
+    { id: 'S2MSI2A', label: 'S2MSI2A — Sentinel-2 Level-2A Bottom-Of-Atmosphere Reflectance' },
+    { id: 'S2MSI1C', label: 'S2MSI1C — Sentinel-2 Level-1C Top-Of-Atmosphere Reflectance' },
+    { id: 'SENTINEL-1', label: 'SENTINEL-1 — Sentinel-1 Synthetic Aperture Radar (SAR)' },
+    { id: 'SENTINEL-3', label: 'SENTINEL-3 — Sentinel-3 OLCI / SLSTR Ocean & Land Data' },
   ],
 };
 
@@ -291,6 +301,8 @@ export const SatelliteSearchModal: React.FC<SatelliteSearchModalProps> = ({
   const [minLat, setMinLat] = useState('12.85');
   const [maxLon, setMaxLon] = useState('77.75');
   const [maxLat, setMaxLat] = useState('13.15');
+  const [aoiSourceLabel, setAoiSourceLabel] = useState<string>('Earth Map Selection');
+  const [showAdvancedCoords, setShowAdvancedCoords] = useState(false);
   const [coordErrors, setCoordErrors] = useState<{
     minLon?: string;
     minLat?: string;
@@ -308,6 +320,7 @@ export const SatelliteSearchModal: React.FC<SatelliteSearchModalProps> = ({
       setMinLat(Number(initialBBox[1]).toFixed(4));
       setMaxLon(Number(initialBBox[2]).toFixed(4));
       setMaxLat(Number(initialBBox[3]).toFixed(4));
+      setAoiSourceLabel('Real Earth Map Selection');
       setCoordErrors({});
       setSearchError(null);
     }
@@ -353,8 +366,6 @@ export const SatelliteSearchModal: React.FC<SatelliteSearchModalProps> = ({
       isMounted = false;
     };
   }, [isOpen]);
-
-  if (!isOpen) return null;
 
   const currentProvider = providers.find((p) => p.id === selectedProviderId) || (providers.length > 0 ? providers[0] : null);
   const isProviderConfigured = Boolean(
@@ -418,6 +429,8 @@ export const SatelliteSearchModal: React.FC<SatelliteSearchModalProps> = ({
     }
   }, [availableCollections]);
 
+  if (!isOpen) return null;
+
   const handleProviderChange = (newProviderId: string) => {
     setSelectedProviderId(newProviderId);
     setSearchResults([]);
@@ -429,6 +442,7 @@ export const SatelliteSearchModal: React.FC<SatelliteSearchModalProps> = ({
     setMinLat(preset.bbox[1].toString());
     setMaxLon(preset.bbox[2].toString());
     setMaxLat(preset.bbox[3].toString());
+    setAoiSourceLabel(`Preset: ${preset.name}`);
     setCoordErrors({});
     setDateErrors({});
     setSearchError(null);
@@ -793,120 +807,182 @@ export const SatelliteSearchModal: React.FC<SatelliteSearchModalProps> = ({
               )}
             </div>
 
-            {/* Presets */}
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-sat-dim mb-1.5">
-                Quick AOI Presets
-              </label>
-              <div className="flex flex-wrap gap-1.5">
-                {PRESET_AOIS.map((preset) => (
-                  <button
-                    key={preset.name}
-                    type="button"
-                    onClick={() => handleApplyPreset(preset)}
-                    className="rounded border border-sat-border bg-sat-panel/60 px-2 py-1 text-[11px] text-sat-muted hover:border-sat-accent hover:text-sat-accent transition-colors"
-                  >
-                    {preset.name}
-                  </button>
-                ))}
+            {/* Active AOI Summary Card */}
+            <div className="rounded-lg border border-sky-500/30 bg-sky-950/20 p-3 shadow-inner space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5 font-mono text-xs font-bold text-sky-400">
+                  <MapPin className="h-4 w-4 text-sky-400" />
+                  <span>Area of Interest (AOI)</span>
+                </div>
+                <span className="rounded bg-sky-500/20 border border-sky-400/40 px-2 py-0.5 font-mono text-[10px] font-semibold text-sky-300">
+                  {aoiSourceLabel}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 text-xs font-mono">
+                <div className="bg-sat-surface/90 border border-sat-border/80 rounded px-2 py-1.5">
+                  <span className="text-[9px] text-sat-dim block uppercase">Southwest (Min)</span>
+                  <span className="text-sat-text font-semibold">{minLon}° , {minLat}°</span>
+                </div>
+                <div className="bg-sat-surface/90 border border-sat-border/80 rounded px-2 py-1.5">
+                  <span className="text-[9px] text-sat-dim block uppercase">Northeast (Max)</span>
+                  <span className="text-sat-text font-semibold">{maxLon}° , {maxLat}°</span>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between text-[10px] font-mono text-sat-dim pt-1 border-t border-sky-500/20">
+                <span>
+                  Center: <strong className="text-sky-300">{((parseFloat(minLon) + parseFloat(maxLon)) / 2 || 0).toFixed(4)}°, {((parseFloat(minLat) + parseFloat(maxLat)) / 2 || 0).toFixed(4)}°</strong>
+                </span>
+                <span>
+                  Span: <strong className="text-sky-300">{(Math.abs(parseFloat(maxLon) - parseFloat(minLon)) || 0).toFixed(3)}° × {(Math.abs(parseFloat(maxLat) - parseFloat(minLat)) || 0).toFixed(3)}°</strong>
+                </span>
               </div>
             </div>
 
-            {/* Bounding Box */}
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="text-xs font-bold uppercase tracking-wider text-sat-dim flex items-center gap-1.5">
-                  <MapPin className="h-3.5 w-3.5 text-sat-accent" />
-                  Bounding Box (Min Lon, Min Lat, Max Lon, Max Lat)
-                </label>
-                <span className="text-[10px] text-sat-dim/70">[-180..180, -90..90]</span>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <div className="text-[10px] text-sat-dim mb-0.5">Min Longitude</div>
-                  <input
-                    type="text"
-                    placeholder="-180 to 180"
-                    value={minLon}
-                    onChange={(e) => {
-                      setMinLon(e.target.value);
-                      if (coordErrors.minLon) setCoordErrors((prev) => ({ ...prev, minLon: undefined }));
-                    }}
-                    className={`w-full rounded border px-2.5 py-1.5 text-xs text-sat-text focus:outline-none transition-colors ${
-                      coordErrors.minLon
-                        ? 'border-rose-500 bg-rose-500/10 focus:border-rose-400'
-                        : 'border-sat-border bg-sat-panel/80 focus:border-sat-accent'
-                    }`}
-                    required
-                  />
-                  {coordErrors.minLon && (
-                    <span className="text-[10px] text-rose-400 mt-0.5 block">{coordErrors.minLon}</span>
+            {/* Advanced Manual Coordinate Entry & Presets Toggle */}
+            <div className="border-t border-sat-border/60 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowAdvancedCoords((prev) => !prev)}
+                className="flex items-center justify-between w-full rounded border border-sat-border/60 bg-sat-panel/40 px-3 py-2 font-mono text-[11px] font-bold text-sat-dim hover:text-sat-accent hover:border-sat-accent/50 transition-colors"
+              >
+                <span className="flex items-center gap-1.5">
+                  <Sliders className="h-3.5 w-3.5 text-sat-accent" />
+                  <span>Advanced: Manual Coordinates & Presets</span>
+                </span>
+                <span className="text-sat-accent flex items-center gap-1">
+                  {showAdvancedCoords ? (
+                    <><span>Hide</span> <ChevronUp className="h-3.5 w-3.5" /></>
+                  ) : (
+                    <><span>Edit Manually</span> <ChevronDown className="h-3.5 w-3.5" /></>
                   )}
+                </span>
+              </button>
+
+              {showAdvancedCoords && (
+                <div className="mt-3 space-y-3 p-3 rounded-lg border border-sat-border bg-sat-panel/30 animate-in fade-in duration-150">
+                  {/* Presets */}
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-sat-dim mb-1">
+                      Quick AOI Presets
+                    </label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {PRESET_AOIS.map((preset) => (
+                        <button
+                          key={preset.name}
+                          type="button"
+                          onClick={() => handleApplyPreset(preset)}
+                          className="rounded border border-sat-border bg-sat-panel/60 px-2 py-1 text-[10px] text-sat-muted hover:border-sat-accent hover:text-sat-accent transition-colors"
+                        >
+                          {preset.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Bounding Box Inputs */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-[10px] font-bold uppercase tracking-wider text-sat-dim flex items-center gap-1.5">
+                        <MapPin className="h-3 w-3 text-sat-accent" />
+                        Bounding Box (Min Lon, Min Lat, Max Lon, Max Lat)
+                      </label>
+                      <span className="text-[9px] text-sat-dim/70">[-180..180, -90..90]</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <div className="text-[9px] text-sat-dim mb-0.5">Min Longitude</div>
+                        <input
+                          type="text"
+                          placeholder="-180 to 180"
+                          value={minLon}
+                          onChange={(e) => {
+                            setMinLon(e.target.value);
+                            setAoiSourceLabel('Manual Coordinates');
+                            if (coordErrors.minLon) setCoordErrors((prev) => ({ ...prev, minLon: undefined }));
+                          }}
+                          className={`w-full rounded border px-2.5 py-1.5 text-xs text-sat-text focus:outline-none transition-colors ${
+                            coordErrors.minLon
+                              ? 'border-rose-500 bg-rose-500/10 focus:border-rose-400'
+                              : 'border-sat-border bg-sat-panel/80 focus:border-sat-accent'
+                          }`}
+                          required
+                        />
+                        {coordErrors.minLon && (
+                          <span className="text-[9px] text-rose-400 mt-0.5 block">{coordErrors.minLon}</span>
+                        )}
+                      </div>
+                      <div>
+                        <div className="text-[9px] text-sat-dim mb-0.5">Min Latitude</div>
+                        <input
+                          type="text"
+                          placeholder="-90 to 90"
+                          value={minLat}
+                          onChange={(e) => {
+                            setMinLat(e.target.value);
+                            setAoiSourceLabel('Manual Coordinates');
+                            if (coordErrors.minLat) setCoordErrors((prev) => ({ ...prev, minLat: undefined }));
+                          }}
+                          className={`w-full rounded border px-2.5 py-1.5 text-xs text-sat-text focus:outline-none transition-colors ${
+                            coordErrors.minLat
+                              ? 'border-rose-500 bg-rose-500/10 focus:border-rose-400'
+                              : 'border-sat-border bg-sat-panel/80 focus:border-sat-accent'
+                          }`}
+                          required
+                        />
+                        {coordErrors.minLat && (
+                          <span className="text-[9px] text-rose-400 mt-0.5 block">{coordErrors.minLat}</span>
+                        )}
+                      </div>
+                      <div>
+                        <div className="text-[9px] text-sat-dim mb-0.5">Max Longitude</div>
+                        <input
+                          type="text"
+                          placeholder="-180 to 180"
+                          value={maxLon}
+                          onChange={(e) => {
+                            setMaxLon(e.target.value);
+                            setAoiSourceLabel('Manual Coordinates');
+                            if (coordErrors.maxLon) setCoordErrors((prev) => ({ ...prev, maxLon: undefined }));
+                          }}
+                          className={`w-full rounded border px-2.5 py-1.5 text-xs text-sat-text focus:outline-none transition-colors ${
+                            coordErrors.maxLon
+                              ? 'border-rose-500 bg-rose-500/10 focus:border-rose-400'
+                              : 'border-sat-border bg-sat-panel/80 focus:border-sat-accent'
+                          }`}
+                          required
+                        />
+                        {coordErrors.maxLon && (
+                          <span className="text-[9px] text-rose-400 mt-0.5 block">{coordErrors.maxLon}</span>
+                        )}
+                      </div>
+                      <div>
+                        <div className="text-[9px] text-sat-dim mb-0.5">Max Latitude</div>
+                        <input
+                          type="text"
+                          placeholder="-90 to 90"
+                          value={maxLat}
+                          onChange={(e) => {
+                            setMaxLat(e.target.value);
+                            setAoiSourceLabel('Manual Coordinates');
+                            if (coordErrors.maxLat) setCoordErrors((prev) => ({ ...prev, maxLat: undefined }));
+                          }}
+                          className={`w-full rounded border px-2.5 py-1.5 text-xs text-sat-text focus:outline-none transition-colors ${
+                            coordErrors.maxLat
+                              ? 'border-rose-500 bg-rose-500/10 focus:border-rose-400'
+                              : 'border-sat-border bg-sat-panel/80 focus:border-sat-accent'
+                          }`}
+                          required
+                        />
+                        {coordErrors.maxLat && (
+                          <span className="text-[9px] text-rose-400 mt-0.5 block">{coordErrors.maxLat}</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <div className="text-[10px] text-sat-dim mb-0.5">Min Latitude</div>
-                  <input
-                    type="text"
-                    placeholder="-90 to 90"
-                    value={minLat}
-                    onChange={(e) => {
-                      setMinLat(e.target.value);
-                      if (coordErrors.minLat) setCoordErrors((prev) => ({ ...prev, minLat: undefined }));
-                    }}
-                    className={`w-full rounded border px-2.5 py-1.5 text-xs text-sat-text focus:outline-none transition-colors ${
-                      coordErrors.minLat
-                        ? 'border-rose-500 bg-rose-500/10 focus:border-rose-400'
-                        : 'border-sat-border bg-sat-panel/80 focus:border-sat-accent'
-                    }`}
-                    required
-                  />
-                  {coordErrors.minLat && (
-                    <span className="text-[10px] text-rose-400 mt-0.5 block">{coordErrors.minLat}</span>
-                  )}
-                </div>
-                <div>
-                  <div className="text-[10px] text-sat-dim mb-0.5">Max Longitude</div>
-                  <input
-                    type="text"
-                    placeholder="-180 to 180"
-                    value={maxLon}
-                    onChange={(e) => {
-                      setMaxLon(e.target.value);
-                      if (coordErrors.maxLon) setCoordErrors((prev) => ({ ...prev, maxLon: undefined }));
-                    }}
-                    className={`w-full rounded border px-2.5 py-1.5 text-xs text-sat-text focus:outline-none transition-colors ${
-                      coordErrors.maxLon
-                        ? 'border-rose-500 bg-rose-500/10 focus:border-rose-400'
-                        : 'border-sat-border bg-sat-panel/80 focus:border-sat-accent'
-                    }`}
-                    required
-                  />
-                  {coordErrors.maxLon && (
-                    <span className="text-[10px] text-rose-400 mt-0.5 block">{coordErrors.maxLon}</span>
-                  )}
-                </div>
-                <div>
-                  <div className="text-[10px] text-sat-dim mb-0.5">Max Latitude</div>
-                  <input
-                    type="text"
-                    placeholder="-90 to 90"
-                    value={maxLat}
-                    onChange={(e) => {
-                      setMaxLat(e.target.value);
-                      if (coordErrors.maxLat) setCoordErrors((prev) => ({ ...prev, maxLat: undefined }));
-                    }}
-                    className={`w-full rounded border px-2.5 py-1.5 text-xs text-sat-text focus:outline-none transition-colors ${
-                      coordErrors.maxLat
-                        ? 'border-rose-500 bg-rose-500/10 focus:border-rose-400'
-                        : 'border-sat-border bg-sat-panel/80 focus:border-sat-accent'
-                    }`}
-                    required
-                  />
-                  {coordErrors.maxLat && (
-                    <span className="text-[10px] text-rose-400 mt-0.5 block">{coordErrors.maxLat}</span>
-                  )}
-                </div>
-              </div>
+              )}
             </div>
 
             {/* Date Range */}

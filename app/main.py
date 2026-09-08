@@ -4,6 +4,16 @@ import uuid
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 
+# Load .env variables if present
+_env_file = Path(__file__).resolve().parent.parent / ".env"
+if _env_file.exists():
+    with open(_env_file, "r", encoding="utf-8") as _f:
+        for _line in _f:
+            _line = _line.strip()
+            if _line and not _line.startswith("#") and "=" in _line:
+                _k, _v = _line.split("=", 1)
+                os.environ[_k.strip()] = _v.strip()
+
 from fastapi import (
     FastAPI,
     File,

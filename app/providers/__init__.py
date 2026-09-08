@@ -11,6 +11,7 @@ from app.providers.base import (
     SearchResponse,
 )
 from app.providers.bhoonidhi import BhoonidhiProvider
+from app.providers.cdse import CDSEProvider
 from app.providers.exceptions import (
     InvalidSearchRequestError,
     ProductNotAvailableError,
@@ -25,6 +26,7 @@ from app.providers.registry import get_provider, list_providers, register_provid
 __all__ = [
     "SatelliteDataProvider",
     "BhoonidhiProvider",
+    "CDSEProvider",
     "SearchRequest",
     "SearchResponse",
     "ProductMetadata",
