@@ -135,6 +135,8 @@ def build_perfect_sih_deck():
     gap = Inches(0.24)
     c_top = Inches(2.2)
     c_h = Inches(4.45)
+    w_card_w = Inches(6.02)
+    w_gap = Inches(0.29)
 
     s2_sections = [
         ("• Detailed explanation of the proposed solution", [
@@ -175,109 +177,11 @@ def build_perfect_sih_deck():
             r_body = p_b.add_run(); r_body.text = b_body; r_body.font.size = Pt(10.2); r_body.font.color.rgb = DARK_GRAY
 
     # =========================================================================
-    # SLIDE 3: EXACT SIH TEMPLATE - TECHNICAL APPROACH
+    # SLIDE 3: EXACT SIH TEMPLATE - TECHNICAL APPROACH (ARCHITECTURE + TECHSTACKS)
     # =========================================================================
     s3 = prs.slides.add_slide(blank_layout)
-    add_template_header_and_footer(s3, "TECHNICAL APPROACH", 3)
-
-    hdr_box3 = s3.shapes.add_textbox(Inches(0.5), Inches(1.45), Inches(12.333), Inches(0.6))
-    h3_run = hdr_box3.text_frame.paragraphs[0].add_run()
-    h3_run.text = "❖ Technical Approach (Architecture, Stack & Methodology)"
-    h3_run.font.size = Pt(23); h3_run.font.bold = True; h3_run.font.underline = True; h3_run.font.color.rgb = SIH_BLUE
-
-    w_card_w = Inches(6.02)
-    w_gap = Inches(0.29)
-
-    # Card 1: Technologies to be used (Stack & Hardware)
-    c1_s3 = s3.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(0.5), c_top, w_card_w, c_h)
-    c1_s3.fill.solid(); c1_s3.fill.fore_color.rgb = LIGHT_BG; c1_s3.line.color.rgb = CARD_BORDER; c1_s3.line.width = Pt(1.5)
-
-    tb_s3_1 = s3.shapes.add_textbox(Inches(0.7), c_top + Inches(0.12), w_card_w - Inches(0.4), c_h - Inches(0.24))
-    tf_s3_1 = tb_s3_1.text_frame; tf_s3_1.word_wrap = True
-
-    p_s3_1 = tf_s3_1.paragraphs[0]
-    p_s3_1.text = "• Technologies to be used (e.g. programming languages, frameworks, hardware)"
-    p_s3_1.font.size = Pt(14); p_s3_1.font.bold = True; p_s3_1.font.color.rgb = NAVY
-
-    tech_bullets = [
-        ("Languages: ", "Python 3.11 (Backend AI/GIS Engines), TypeScript (Frontend Web App)."),
-        ("Frontend GIS: ", "React 19, Vite 8, Tailwind CSS v4, MapLibre GL (@nextgis/ngw-map)."),
-        ("Backend & API: ", "FastAPI, Uvicorn ASGI, Pydantic v2 schemas, RESTful OpenAPI/Swagger."),
-        ("AI / Vision-Language: ", "PyTorch, Hugging Face Transformers (Fine-tuned BLIP VQA & Grounder)."),
-        ("Geospatial Engine: ", "GDAL, Rasterio, NumPy (GeoTIFF, NetCDF, CRS reprojection, band math)."),
-        ("Hardware & Portability: ", "Optimized CPU inference (<300ms), optional CUDA GPU acceleration.")
-    ]
-
-    for lead, desc in tech_bullets:
-        p = tf_s3_1.add_paragraph(); p.space_before = Pt(8)
-        r1 = p.add_run(); r1.text = f"• {lead}"; r1.font.bold = True; r1.font.size = Pt(11.0); r1.font.color.rgb = DARK_GRAY
-        r2 = p.add_run(); r2.text = desc; r2.font.size = Pt(11.0); r2.font.color.rgb = DARK_GRAY
-
-    # Card 2: Methodology & Implementation Process
-    c2_s3 = s3.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(0.5) + w_card_w + w_gap, c_top, w_card_w, c_h)
-    c2_s3.fill.solid(); c2_s3.fill.fore_color.rgb = LIGHT_BG; c2_s3.line.color.rgb = CARD_BORDER; c2_s3.line.width = Pt(1.5)
-
-    tb_s3_2 = s3.shapes.add_textbox(Inches(0.5) + w_card_w + w_gap + Inches(0.2), c_top + Inches(0.12), w_card_w - Inches(0.4), c_h - Inches(0.24))
-    tf_s3_2 = tb_s3_2.text_frame; tf_s3_2.word_wrap = True
-
-    p_s3_2 = tf_s3_2.paragraphs[0]
-    p_s3_2.text = "• Methodology and process for implementation (Flow Charts/Images/ working prototype)"
-    p_s3_2.font.size = Pt(14); p_s3_2.font.bold = True; p_s3_2.font.color.rgb = NAVY
-
-    # Flow Chart Step Boxes in Card 2
-    flow_steps = [
-        ("Step 1: Raster Ingestion & Georeferencing", "Auto-reads GeoTIFFs, reprojects CRS, extracts bounds & metadata (GDAL/Rasterio)"),
-        ("Step 2: Natural Language Intent Parsing", "QueryClassifier parses question intent & validates input modality constraints"),
-        ("Step 3: Agentic Orchestration & Routing", "Deterministic ModelRegistry routes strictly to verified specialist (Zero Hallucination)"),
-        ("Step 4: Specialist AI & Spectral Engines", "Runs BLIP VQA, Text Grounder, Change Detection, Optical+SAR Fusion, or Hydro-NDWI"),
-        ("Step 5: Interactive GIS Visualization & Audit", "Renders MapLibre GL vector overlays, confidence score & exportable audit log")
-    ]
-
-    f_box_left = Inches(0.5) + w_card_w + w_gap + Inches(0.2)
-    f_box_width = w_card_w - Inches(0.4)
-    f_box_height = Inches(0.56)
-    f_start_top = c_top + Inches(0.58)
-    f_step_gap = Inches(0.76)
-
-    for i, (step_title, step_desc) in enumerate(flow_steps):
-        cur_top = f_start_top + i * f_step_gap
-
-        # Flow Step Container Box
-        f_box = s3.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, f_box_left, cur_top, f_box_width, f_box_height)
-        f_box.fill.solid()
-        f_box.fill.fore_color.rgb = WHITE if i % 2 == 0 else RGBColor(241, 245, 250)
-        f_box.line.color.rgb = SIH_BLUE if i % 2 == 1 else RGBColor(180, 195, 215)
-        f_box.line.width = Pt(1.2)
-
-        # Step Text
-        f_tf = f_box.text_frame
-        f_tf.word_wrap = True
-        f_tf.margin_left = Inches(0.12)
-        f_tf.margin_right = Inches(0.12)
-        f_tf.margin_top = Inches(0.04)
-        f_tf.margin_bottom = Inches(0.04)
-
-        p_st = f_tf.paragraphs[0]
-        p_st.text = step_title
-        p_st.font.size = Pt(10.5)
-        p_st.font.bold = True
-        p_st.font.color.rgb = NAVY
-
-        p_sd = f_tf.add_paragraph()
-        p_sd.text = step_desc
-        p_sd.font.size = Pt(9.2)
-        p_sd.font.color.rgb = DARK_GRAY
-
-        # Down Arrow between boxes
-        if i < len(flow_steps) - 1:
-            arr_top = cur_top + f_box_height
-            arr_box = s3.shapes.add_textbox(f_box_left + Inches(2.6), arr_top - Inches(0.04), Inches(0.5), Inches(0.25))
-            ap = arr_box.text_frame.paragraphs[0]
-            ap.text = "▼"
-            ap.font.size = Pt(10)
-            ap.font.bold = True
-            ap.font.color.rgb = SIH_BLUE
-            ap.alignment = PP_ALIGN.CENTER
+    from add_slide3_ppt import build_slide3_architecture
+    build_slide3_architecture(prs, s3)
 
     # =========================================================================
     # SLIDE 4: EXACT SIH TEMPLATE - FEASIBILITY & CHALLENGES
