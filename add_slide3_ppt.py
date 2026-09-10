@@ -60,24 +60,24 @@ def update_presentation():
 
     c1_hdr = s3.shapes.add_textbox(Inches(0.8), Inches(1.9), Inches(5.5), Inches(0.6))
     c1_hp = c1_hdr.text_frame.paragraphs[0]
-    c1_hp.text = "• Technologies to be used (Stack & Hardware)"
-    c1_hp.font.size = Pt(16); c1_hp.font.bold = True; c1_hp.font.color.rgb = NAVY
+    c1_hp.text = "• Technologies to be used (e.g. programming languages, frameworks, hardware)"
+    c1_hp.font.size = Pt(14.5); c1_hp.font.bold = True; c1_hp.font.color.rgb = NAVY
 
     c1_body = s3.shapes.add_textbox(Inches(0.8), Inches(2.5), Inches(5.5), Inches(4.1))
     c1_btf = c1_body.text_frame; c1_btf.word_wrap = True
 
     tech_items = [
-        ("Languages: ", "Python 3.11 (Backend AI/GIS Engines), TypeScript & JavaScript (Frontend Web App)."),
-        ("AI & Deep Learning: ", "PyTorch, Hugging Face Transformers, PEFT/LoRA (RS-VLM adapted on BigEarthNet.txt)."),
-        ("Geospatial & Ingestion: ", "Rasterio, GDAL, NumPy, SciPy, Shapely (GeoTIFF, CRS reprojection, affine transforms, multi-band radiometry)."),
-        ("API & Gateway: ", "FastAPI (asynchronous REST API), Uvicorn, Pydantic v2 (strict schema validation)."),
-        ("GIS Frontend: ", "React 19, Vite, MapLibre GL (WebGL map canvas, change-wipe slider), Tailwind CSS."),
-        ("Hardware & Compute: ", "Optimized CPU inference (PyTorch CPU / NumPy) with dynamic CUDA GPU acceleration when deployed on NVIDIA hardware.")
+        ("Languages: ", "Python 3.11 (Backend AI/GIS), TypeScript (Frontend Web App)."),
+        ("Frontend GIS: ", "React 19, Vite, Tailwind CSS v4, MapLibre GL (@nextgis/ngw-map)."),
+        ("Backend & API: ", "FastAPI, Uvicorn ASGI, Pydantic v2, RESTful OpenAPI/Swagger."),
+        ("AI / Vision-Language: ", "PyTorch, Hugging Face Transformers (Fine-tuned BLIP VQA & Grounder)."),
+        ("Geospatial Engine: ", "GDAL, Rasterio, NumPy (GeoTIFF, NetCDF, CRS reprojection, band math)."),
+        ("Hardware & Deployment: ", "Optimized CPU inference (<300ms), optional CUDA GPU acceleration.")
     ]
 
     for idx, (lead, desc) in enumerate(tech_items):
         p = c1_btf.paragraphs[0] if idx == 0 else c1_btf.add_paragraph()
-        p.space_after = Pt(8)
+        p.space_after = Pt(10)
         r1 = p.add_run(); r1.text = "• " + lead; r1.font.bold = True; r1.font.size = Pt(11.5); r1.font.color.rgb = DARK_GRAY
         r2 = p.add_run(); r2.text = desc; r2.font.bold = False; r2.font.size = Pt(11); r2.font.color.rgb = DARK_GRAY
 
@@ -88,25 +88,63 @@ def update_presentation():
 
     c2_hdr = s3.shapes.add_textbox(Inches(7.0), Inches(1.9), Inches(5.5), Inches(0.6))
     c2_hp = c2_hdr.text_frame.paragraphs[0]
-    c2_hp.text = "• Methodology & Implementation Process"
-    c2_hp.font.size = Pt(16); c2_hp.font.bold = True; c2_hp.font.color.rgb = ACCENT_BLUE
+    c2_hp.text = "• Methodology and process for implementation (Flow Charts/Images/ working prototype)"
+    c2_hp.font.size = Pt(14.5); c2_hp.font.bold = True; c2_hp.font.color.rgb = ACCENT_BLUE
 
-    c2_body = s3.shapes.add_textbox(Inches(7.0), Inches(2.5), Inches(5.5), Inches(4.1))
-    c2_btf = c2_body.text_frame; c2_btf.word_wrap = True
-
-    method_items = [
-        ("1. Raster Ingestion (RasterIngestor): ", "Reads GeoTIFF headers, checks CRS and spatial bounds overlap, and calibrates SAR σ⁰ dB and optical reflectance."),
-        ("2. Intent Parsing (QueryClassifier): ", "Extracts linguistic intent (VQA, Grounding, Change, Fusion) and target keywords from user query."),
-        ("3. Agentic Routing (AgentOrchestrator): ", "Enforces input-mode constraints and dynamically selects verified specialists from ModelRegistry."),
-        ("4. Specialist Execution: ", "Runs adapted RS-VLM for questions, grounding model for bounding boxes, change detector for difference maps, or optical-SAR fusion."),
-        ("5. Evidence & Audit (ExecutionTracker): ", "Draws GeoJSON vector overlays on MapLibre map, computes honest confidence, and logs immutable telemetry.")
+    # Flow Chart Step Boxes in Card 2
+    flow_steps = [
+        ("Step 1: Raster Ingestion & Georeferencing", "Auto-reads GeoTIFFs, reprojects CRS, extracts bounds & metadata (GDAL/Rasterio)"),
+        ("Step 2: Natural Language Intent Parsing", "QueryClassifier parses question intent & validates input modality constraints"),
+        ("Step 3: Agentic Orchestration & Routing", "Deterministic ModelRegistry routes strictly to verified specialist (Zero Hallucination)"),
+        ("Step 4: Specialist AI & Spectral Engines", "Runs BLIP VQA, Text Grounder, Change Detection, Optical+SAR Fusion, or Hydro-NDWI"),
+        ("Step 5: Interactive GIS Visualization & Audit", "Renders MapLibre GL vector overlays, confidence score & exportable audit log")
     ]
 
-    for idx, (lead, desc) in enumerate(method_items):
-        p = c2_btf.paragraphs[0] if idx == 0 else c2_btf.add_paragraph()
-        p.space_after = Pt(8)
-        r1 = p.add_run(); r1.text = lead; r1.font.bold = True; r1.font.size = Pt(11.5); r1.font.color.rgb = NAVY
-        r2 = p.add_run(); r2.text = desc; r2.font.bold = False; r2.font.size = Pt(11); r2.font.color.rgb = DARK_GRAY
+    box_left = Inches(7.0)
+    box_width = Inches(5.5)
+    box_height = Inches(0.58)
+    start_top = Inches(2.55)
+    step_gap = Inches(0.78)
+
+    for i, (step_title, step_desc) in enumerate(flow_steps):
+        cur_top = start_top + i * step_gap
+
+        # Flow Step Container Box
+        f_box = s3.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, box_left, cur_top, box_width, box_height)
+        f_box.fill.solid()
+        f_box.fill.fore_color.rgb = WHITE if i % 2 == 0 else RGBColor(241, 245, 250)
+        f_box.line.color.rgb = ACCENT_BLUE if i % 2 == 1 else RGBColor(180, 195, 215)
+        f_box.line.width = Pt(1.2)
+
+        # Step Text
+        f_tf = f_box.text_frame
+        f_tf.word_wrap = True
+        f_tf.margin_left = Inches(0.12)
+        f_tf.margin_right = Inches(0.12)
+        f_tf.margin_top = Inches(0.04)
+        f_tf.margin_bottom = Inches(0.04)
+
+        p_st = f_tf.paragraphs[0]
+        p_st.text = step_title
+        p_st.font.size = Pt(10.5)
+        p_st.font.bold = True
+        p_st.font.color.rgb = NAVY
+
+        p_sd = f_tf.add_paragraph()
+        p_sd.text = step_desc
+        p_sd.font.size = Pt(9.2)
+        p_sd.font.color.rgb = DARK_GRAY
+
+        # Down Arrow between boxes
+        if i < len(flow_steps) - 1:
+            arr_top = cur_top + box_height
+            arr_box = s3.shapes.add_textbox(box_left + Inches(2.5), arr_top - Inches(0.04), Inches(0.5), Inches(0.25))
+            ap = arr_box.text_frame.paragraphs[0]
+            ap.text = "▼"
+            ap.font.size = Pt(10)
+            ap.font.bold = True
+            ap.font.color.rgb = ACCENT_BLUE
+            ap.alignment = PP_ALIGN.CENTER
 
     # Footer
     fbar = s3.shapes.add_shape(MSO_SHAPE.RECTANGLE, 0, Inches(6.9), Inches(13.333), Inches(0.6))

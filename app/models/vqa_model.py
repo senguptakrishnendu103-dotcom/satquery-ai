@@ -851,15 +851,19 @@ class RemoteSensingCaptioningModel(BaseRSModel):
             2,
         )
 
-        result = {
-            "answer": answer,
+        formatted_answer, calc_confidence, evidence_regions = RemoteSensingVQAModel._format_pointwise_descriptive_answer(
+            answer, query, observation
+        )
 
-            "confidence": 0,  # Uncalibrated VLM generation score per Task 7
+        result = {
+            "answer": formatted_answer,
+
+            "confidence": calc_confidence,
 
             "visual_evidence": {
                 "overlay_type": "scene_description",
-                "label": "VLM Scene Description",
-                "regions": [],
+                "label": "Remote Sensing Scene Context",
+                "regions": evidence_regions,
             },
 
             "execution_details": {
