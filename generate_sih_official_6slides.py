@@ -396,7 +396,7 @@ def build_perfect_sih_deck():
     h6_run.text = "❖ Details / Links of the reference and research work"
     h6_run.font.size = Pt(23); h6_run.font.bold = True; h6_run.font.underline = True; h6_run.font.color.rgb = SIH_BLUE
 
-    # Card 1: Benchmark Datasets & Research Papers
+    # Card 1: ISRO National Datasets & Portals (Bhuvan & Bhoonidhi)
     c1_s6 = s6.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(0.5), c_top, w_card_w, c_h)
     c1_s6.fill.solid(); c1_s6.fill.fore_color.rgb = LIGHT_BG; c1_s6.line.color.rgb = CARD_BORDER; c1_s6.line.width = Pt(1.5)
 
@@ -404,22 +404,22 @@ def build_perfect_sih_deck():
     tf_s6_1 = tb_s6_1.text_frame; tf_s6_1.word_wrap = True
 
     p_s6_1 = tf_s6_1.paragraphs[0]
-    p_s6_1.text = "• Benchmark Datasets & Research Papers"
+    p_s6_1.text = "• ISRO Bhuvan & Bhoonidhi National Space Portals"
     p_s6_1.font.size = Pt(14); p_s6_1.font.bold = True; p_s6_1.font.color.rgb = NAVY
 
-    research_datasets = [
-        ("BigEarthNet (Sumbul et al., 2019): ", "Multimodal Sentinel-1/2 benchmark for RS-VLM fine-tuning (arXiv:1902.06148)."),
-        ("RSVQA Benchmark (Lobry et al., IEEE TGRS): ", "Standard evaluation benchmark for Remote Sensing Visual Question Answering."),
-        ("VRSBench (Li et al., IEEE TGRS 2024): ", "Benchmark for text-guided visual grounding and remote sensing captioning."),
-        ("CDVQA (Yuan et al., IEEE GRSL 2022): ", "Bi-temporal change detection visual QA benchmark for multi-temporal analysis.")
+    isro_datasets = [
+        ("ISRO Bhuvan Geoportal (bhuvan.nrsc.gov.in): ", "Thematic Land Use/Land Cover (LULC), flood hazard layers, CartoDEM elevation models, and disaster services."),
+        ("NRSC Bhoonidhi Open Data Hub (bhoonidhi.nrsc.gov.in): ", "Resourcesat-2/2A LISS-IV (5.8m optical), Cartosat-2/3, and RISAT-1A (EOS-04 C-band SAR) products."),
+        ("ISRO MOSDAC (mosdac.gov.in): ", "Space Applications Centre (SAC) meteorological & oceanographic datasets (INSAT-3D/3DR, Oceansat-2/3 scatterometer)."),
+        ("Ministry of Jal Shakti / NHP (indiawris.gov.in): ", "India-WRIS surface water dynamics, reservoir storage capacities, and national wetland inventory datasets.")
     ]
 
-    for lead, desc in research_datasets:
+    for lead, desc in isro_datasets:
         p = tf_s6_1.add_paragraph(); p.space_before = Pt(8)
         r1 = p.add_run(); r1.text = f"• {lead}"; r1.font.bold = True; r1.font.size = Pt(10.5); r1.font.color.rgb = DARK_GRAY
         r2 = p.add_run(); r2.text = desc; r2.font.size = Pt(10.5); r2.font.color.rgb = DARK_GRAY
 
-    # Card 2: Mission Specifications, Standards & Project Repository
+    # Card 2: Copernicus & Global Open Remote Sensing Datasets
     c2_s6 = s6.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(0.5) + w_card_w + w_gap, c_top, w_card_w, c_h)
     c2_s6.fill.solid(); c2_s6.fill.fore_color.rgb = LIGHT_BG; c2_s6.line.color.rgb = CARD_BORDER; c2_s6.line.width = Pt(1.5)
 
@@ -427,17 +427,17 @@ def build_perfect_sih_deck():
     tf_s6_2 = tb_s6_2.text_frame; tf_s6_2.word_wrap = True
 
     p_s6_2 = tf_s6_2.paragraphs[0]
-    p_s6_2.text = "• Standards, Space Missions & Project Repository"
+    p_s6_2.text = "• Copernicus & Global Open Geospatial Benchmarks"
     p_s6_2.font.size = Pt(14); p_s6_2.font.bold = True; p_s6_2.font.color.rgb = NAVY
 
-    sensor_standards = [
-        ("ISRO / SAC Data Manuals: ", "Resourcesat-2A, Cartosat-3 & RISAT-1A (EOS-04) data formats (bhoonidhi.nrsc.gov.in)."),
-        ("ESA Copernicus Standards: ", "Sentinel-1 SAR & Sentinel-2 MSI data specifications (dataspace.copernicus.eu)."),
-        ("OGC & STAC Standards: ", "OGC GeoTIFF raster specifications, EPSG coordinate systems, and STAC catalog APIs."),
-        ("Open-Source Codebase: ", "Full SatQuery AI implementation & weights (github.com/senguptakrishnendu103-dotcom/satquery-ai).")
+    global_datasets = [
+        ("ESA Copernicus CDSE (dataspace.copernicus.eu): ", "Sentinel-1 (C-band SAR dual-pol VV/VH) & Sentinel-2 (13-band MSI L2A surface reflectance rasters)."),
+        ("BigEarthNet-MM Benchmark (bigearth.net): ", "590,326 multimodal Sentinel-1/2 paired tiles used for RS-VLM domain adaptation (arXiv:1902.06148)."),
+        ("USGS EarthExplorer / Landsat 8-9 (earthexplorer.usgs.gov): ", "Calibrated Operational Land Imager (OLI) multi-spectral and thermal infrared radiance archives."),
+        ("OGC & STAC Open Standards (ogc.org / stacspec.org): ", "Cloud-Optimized GeoTIFF (COG), SpatioTemporal Asset Catalog, and open-source SatQuery AI pipeline.")
     ]
 
-    for lead, desc in sensor_standards:
+    for lead, desc in global_datasets:
         p = tf_s6_2.add_paragraph(); p.space_before = Pt(8)
         r1 = p.add_run(); r1.text = f"• {lead}"; r1.font.bold = True; r1.font.size = Pt(10.5); r1.font.color.rgb = DARK_GRAY
         r2 = p.add_run(); r2.text = desc; r2.font.size = Pt(10.5); r2.font.color.rgb = DARK_GRAY

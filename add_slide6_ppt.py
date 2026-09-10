@@ -55,49 +55,49 @@ def add_slide6():
 
     c1_hdr = s6.shapes.add_textbox(Inches(0.8), Inches(1.9), Inches(5.5), Inches(0.6))
     c1_hp = c1_hdr.text_frame.paragraphs[0]
-    c1_hp.text = "• Benchmark Datasets & Research Papers"
-    c1_hp.font.size = Pt(15); c1_hp.font.bold = True; c1_hp.font.color.rgb = NAVY
+    c1_hp.text = "• ISRO Bhuvan & Bhoonidhi National Space Portals"
+    c1_hp.font.size = Pt(14); c1_hp.font.bold = True; c1_hp.font.color.rgb = NAVY
 
     c1_body = s6.shapes.add_textbox(Inches(0.8), Inches(2.5), Inches(5.5), Inches(4.1))
     c1_btf = c1_body.text_frame; c1_btf.word_wrap = True
 
-    dataset_refs = [
-        ("BigEarthNet (Sumbul et al., 2019): ", "Multimodal Sentinel-1/2 benchmark for RS-VLM fine-tuning (arXiv:1902.06148)."),
-        ("RSVQA Benchmark (Lobry et al., IEEE TGRS): ", "Standard evaluation benchmark for Remote Sensing Visual Question Answering."),
-        ("VRSBench (Li et al., IEEE TGRS 2024): ", "Benchmark for text-guided visual grounding and remote sensing captioning."),
-        ("CDVQA (Yuan et al., IEEE GRSL 2022): ", "Bi-temporal change detection visual QA benchmark for multi-temporal analysis.")
+    isro_datasets = [
+        ("ISRO Bhuvan Geoportal (bhuvan.nrsc.gov.in): ", "Thematic Land Use/Land Cover (LULC), flood hazard layers, CartoDEM elevation models, and disaster services."),
+        ("NRSC Bhoonidhi Open Data Hub (bhoonidhi.nrsc.gov.in): ", "Resourcesat-2/2A LISS-IV (5.8m optical), Cartosat-2/3, and RISAT-1A (EOS-04 C-band SAR) products."),
+        ("ISRO MOSDAC (mosdac.gov.in): ", "Space Applications Centre (SAC) meteorological & oceanographic datasets (INSAT-3D/3DR, Oceansat-2/3 scatterometer)."),
+        ("Ministry of Jal Shakti / NHP (indiawris.gov.in): ", "India-WRIS surface water dynamics, reservoir storage capacities, and national wetland inventory datasets.")
     ]
 
-    for idx, (lead, desc) in enumerate(dataset_refs):
+    for idx, (lead, desc) in enumerate(isro_datasets):
         p = c1_btf.paragraphs[0] if idx == 0 else c1_btf.add_paragraph()
         p.space_after = Pt(8)
-        r1 = p.add_run(); r1.text = "• " + lead; r1.font.bold = True; r1.font.size = Pt(11); r1.font.color.rgb = DARK_GRAY
+        r1 = p.add_run(); r1.text = "• " + lead; r1.font.bold = True; r1.font.size = Pt(10.5); r1.font.color.rgb = DARK_GRAY
         r2 = p.add_run(); r2.text = desc; r2.font.bold = False; r2.font.size = Pt(10.5); r2.font.color.rgb = DARK_GRAY
 
-    # Card 2: Standards & Space Missions
+    # Card 2: Copernicus & Global Open Remote Sensing Datasets
     c2 = s6.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(6.8), Inches(1.8), Inches(5.9), Inches(4.9))
     c2.fill.solid(); c2.fill.fore_color.rgb = LIGHT_BG
     c2.line.color.rgb = CARD_BORDER; c2.line.width = Pt(1.5)
 
     c2_hdr = s6.shapes.add_textbox(Inches(7.0), Inches(1.9), Inches(5.5), Inches(0.6))
     c2_hp = c2_hdr.text_frame.paragraphs[0]
-    c2_hp.text = "• Standards, Space Missions & Project Repository"
-    c2_hp.font.size = Pt(15); c2_hp.font.bold = True; c2_hp.font.color.rgb = ACCENT_BLUE
+    c2_hp.text = "• Copernicus & Global Open Geospatial Benchmarks"
+    c2_hp.font.size = Pt(14); c2_hp.font.bold = True; c2_hp.font.color.rgb = ACCENT_BLUE
 
     c2_body = s6.shapes.add_textbox(Inches(7.0), Inches(2.5), Inches(5.5), Inches(4.1))
     c2_btf = c2_body.text_frame; c2_btf.word_wrap = True
 
-    sensor_refs = [
-        ("ISRO / SAC Data Manuals: ", "Resourcesat-2A, Cartosat-3 & RISAT-1A (EOS-04) data formats (bhoonidhi.nrsc.gov.in)."),
-        ("ESA Copernicus Standards: ", "Sentinel-1 SAR & Sentinel-2 MSI data specifications (dataspace.copernicus.eu)."),
-        ("OGC & STAC Standards: ", "OGC GeoTIFF raster specifications, EPSG coordinate systems, and STAC catalog APIs."),
-        ("Open-Source Codebase: ", "Full SatQuery AI implementation & weights (github.com/senguptakrishnendu103-dotcom/satquery-ai).")
+    global_datasets = [
+        ("ESA Copernicus CDSE (dataspace.copernicus.eu): ", "Sentinel-1 (C-band SAR dual-pol VV/VH) & Sentinel-2 (13-band MSI L2A surface reflectance rasters)."),
+        ("BigEarthNet-MM Benchmark (bigearth.net): ", "590,326 multimodal Sentinel-1/2 paired tiles used for RS-VLM domain adaptation (arXiv:1902.06148)."),
+        ("USGS EarthExplorer / Landsat 8-9 (earthexplorer.usgs.gov): ", "Calibrated Operational Land Imager (OLI) multi-spectral and thermal infrared radiance archives."),
+        ("OGC & STAC Open Standards (ogc.org / stacspec.org): ", "Cloud-Optimized GeoTIFF (COG), SpatioTemporal Asset Catalog, and open-source SatQuery AI pipeline.")
     ]
 
-    for idx, (lead, desc) in enumerate(sensor_refs):
+    for idx, (lead, desc) in enumerate(global_datasets):
         p = c2_btf.paragraphs[0] if idx == 0 else c2_btf.add_paragraph()
         p.space_after = Pt(8)
-        r1 = p.add_run(); r1.text = "• " + lead; r1.font.bold = True; r1.font.size = Pt(11); r1.font.color.rgb = NAVY
+        r1 = p.add_run(); r1.text = "• " + lead; r1.font.bold = True; r1.font.size = Pt(10.5); r1.font.color.rgb = NAVY
         r2 = p.add_run(); r2.text = desc; r2.font.bold = False; r2.font.size = Pt(10.5); r2.font.color.rgb = DARK_GRAY
 
     # Footer
