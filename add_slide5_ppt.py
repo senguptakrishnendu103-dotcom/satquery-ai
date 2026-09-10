@@ -55,24 +55,25 @@ def add_slide5():
 
     c1_hdr = s5.shapes.add_textbox(Inches(0.8), Inches(1.9), Inches(5.5), Inches(0.6))
     c1_hp = c1_hdr.text_frame.paragraphs[0]
-    c1_hp.text = "• Potential Impact on Target Audience"
-    c1_hp.font.size = Pt(16); c1_hp.font.bold = True; c1_hp.font.color.rgb = NAVY
+    c1_hp.text = "• Potential impact on the target audience"
+    c1_hp.font.size = Pt(15); c1_hp.font.bold = True; c1_hp.font.color.rgb = NAVY
 
     c1_body = s5.shapes.add_textbox(Inches(0.8), Inches(2.5), Inches(5.5), Inches(4.1))
     c1_btf = c1_body.text_frame; c1_btf.word_wrap = True
 
     impact_items = [
-        ("Disaster Response (NDRF/SDMA): ", "Cuts flood and landslide damage assessment time from days to seconds using cloud-penetrating SAR and bi-temporal change detection."),
-        ("Water Resources (Jal Shakti): ", "Automates reservoir capacity tracking, wetland monitoring, and drought surveillance without requiring manual band math."),
-        ("Urban Planners & Municipalities: ", "Detects unauthorized urban sprawl and infrastructure encroachment through text-guided object grounding and NDBI indices."),
-        ("Non-Technical Administrators: ", "Empowers district magistrates and field officers to extract critical satellite insights using plain natural language.")
+        ("Disaster Response (NDRF/SDMA): ", "Instant flood extent boundaries & affected area stats (<70ms) to prioritize rescues."),
+        ("Water Authorities (Jal Shakti): ", "Automates reservoir tracking and wetland depletion monitoring without GIS staff."),
+        ("Urban Municipalities: ", "Detects unauthorized built-up sprawl and green cover loss via bi-temporal change maps."),
+        ("District Administrators: ", "Enables non-technical field officers to query satellite scenes in plain natural language."),
+        ("Agriculture & Forestry: ", "Tracks crop canopy stress, seasonal vegetation health, and illegal deforestation trends.")
     ]
 
     for idx, (lead, desc) in enumerate(impact_items):
         p = c1_btf.paragraphs[0] if idx == 0 else c1_btf.add_paragraph()
         p.space_after = Pt(8)
-        r1 = p.add_run(); r1.text = "• " + lead; r1.font.bold = True; r1.font.size = Pt(11.5); r1.font.color.rgb = DARK_GRAY
-        r2 = p.add_run(); r2.text = desc; r2.font.bold = False; r2.font.size = Pt(11); r2.font.color.rgb = DARK_GRAY
+        r1 = p.add_run(); r1.text = "• " + lead; r1.font.bold = True; r1.font.size = Pt(11); r1.font.color.rgb = DARK_GRAY
+        r2 = p.add_run(); r2.text = desc; r2.font.bold = False; r2.font.size = Pt(10.5); r2.font.color.rgb = DARK_GRAY
 
     # Card 2: Benefits
     c2 = s5.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(6.8), Inches(1.8), Inches(5.9), Inches(4.9))
@@ -81,24 +82,25 @@ def add_slide5():
 
     c2_hdr = s5.shapes.add_textbox(Inches(7.0), Inches(1.9), Inches(5.5), Inches(0.6))
     c2_hp = c2_hdr.text_frame.paragraphs[0]
-    c2_hp.text = "• Benefits of the Solution (Social/Economic/Env)"
-    c2_hp.font.size = Pt(16); c2_hp.font.bold = True; c2_hp.font.color.rgb = ACCENT_BLUE
+    c2_hp.text = "• Benefits of the solution (social, economic, environmental, etc.)"
+    c2_hp.font.size = Pt(15); c2_hp.font.bold = True; c2_hp.font.color.rgb = ACCENT_BLUE
 
     c2_body = s5.shapes.add_textbox(Inches(7.0), Inches(2.5), Inches(5.5), Inches(4.1))
     c2_btf = c2_body.text_frame; c2_btf.word_wrap = True
 
     benefit_items = [
-        ("Social Impact: ", "Accelerates life-saving disaster rescue operations with verifiable flood inundation maps and 24/7 cloud-proof situational awareness."),
-        ("Economic Impact: ", "Eliminates high per-seat proprietary GIS software licensing fees (ArcGIS/ENVI) and slashes manual data preparation time by up to 80%."),
-        ("Environmental Impact: ", "Supports climate resilience by continuously monitoring deforestation, lake shrinkage, and agricultural green cover with transparent evidence."),
-        ("Auditability & Governance: ", "Provides an immutable telemetry audit trail (ExecutionTracker) ensuring legal compliance and scientific reproducibility.")
+        ("Social Impact: ", "Democratizes space technology; 24/7 cloud-proof situational awareness during crises."),
+        ("Economic Impact: ", "Reduces GIS turnaround by 90%; eliminates expensive per-seat software licenses (ArcGIS)."),
+        ("Environmental Impact: ", "Continuous, objective tracking of waterbody shrinkage, deforestation, and climate resilience."),
+        ("Strategic / Atmanirbhar Bharat: ", "Native support for Indian space data (ISRO Resourcesat, Cartosat, RISAT) via Bhoonidhi."),
+        ("Auditability & Trust: ", "Immutable telemetry logs with verifiable spatial masks and honest confidence scores.")
     ]
 
     for idx, (lead, desc) in enumerate(benefit_items):
         p = c2_btf.paragraphs[0] if idx == 0 else c2_btf.add_paragraph()
         p.space_after = Pt(8)
-        r1 = p.add_run(); r1.text = "• " + lead; r1.font.bold = True; r1.font.size = Pt(11.5); r1.font.color.rgb = NAVY
-        r2 = p.add_run(); r2.text = desc; r2.font.bold = False; r2.font.size = Pt(11); r2.font.color.rgb = DARK_GRAY
+        r1 = p.add_run(); r1.text = "• " + lead; r1.font.bold = True; r1.font.size = Pt(11); r1.font.color.rgb = NAVY
+        r2 = p.add_run(); r2.text = desc; r2.font.bold = False; r2.font.size = Pt(10.5); r2.font.color.rgb = DARK_GRAY
 
     # Footer
     fbar = s5.shapes.add_shape(MSO_SHAPE.RECTANGLE, 0, Inches(6.9), Inches(13.333), Inches(0.6))

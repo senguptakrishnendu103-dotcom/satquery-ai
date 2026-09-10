@@ -337,7 +337,7 @@ def build_perfect_sih_deck():
     h5_run.text = "❖ Impact & Benefits (Target Audience, Social & Economic Value)"
     h5_run.font.size = Pt(23); h5_run.font.bold = True; h5_run.font.underline = True; h5_run.font.color.rgb = SIH_BLUE
 
-    # Card 1: Potential Impact on Target Audience
+    # Card 1: Potential impact on the target audience
     c1_s5 = s5.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(0.5), c_top, w_card_w, c_h)
     c1_s5.fill.solid(); c1_s5.fill.fore_color.rgb = LIGHT_BG; c1_s5.line.color.rgb = CARD_BORDER; c1_s5.line.width = Pt(1.5)
 
@@ -345,23 +345,23 @@ def build_perfect_sih_deck():
     tf_s5_1 = tb_s5_1.text_frame; tf_s5_1.word_wrap = True
 
     p_s5_1 = tf_s5_1.paragraphs[0]
-    p_s5_1.text = "• Potential Impact on Target Audience"
-    p_s5_1.font.size = Pt(15); p_s5_1.font.bold = True; p_s5_1.font.color.rgb = NAVY
+    p_s5_1.text = "• Potential impact on the target audience"
+    p_s5_1.font.size = Pt(14); p_s5_1.font.bold = True; p_s5_1.font.color.rgb = NAVY
 
     audience_impacts = [
-        ("Disaster Response Teams (NDRF, SDMA): ", "Provides instant flood boundary maps and inundated area calculations (Hydro-NDWI in <70ms) to prioritize life-saving rescue operations."),
-        ("Water Resource Authorities (Ministry of Jal Shakti): ", "Enables automated monitoring of reservoir levels, seasonal surface water shrinkage, and wetland conservation without dedicated GIS teams."),
-        ("Urban Planning & Municipal Corporations: ", "Automatically detects illegal urban encroachments, built-up sprawl, and changes in green cover using NDBI and bi-temporal comparison."),
-        ("Agricultural & Drought Monitoring: ", "Tracks crop canopy variations, irrigation patterns, and drought stress via spectral index calculations and land-cover VQA."),
-        ("Defense & Coastal Maritime Security: ", "Detects marine vessels, coastal changes, and infrastructure expansions through day-and-night SAR object grounding.")
+        ("Disaster Response (NDRF/SDMA): ", "Instant flood extent boundaries & affected area stats (<70ms) to prioritize rescues."),
+        ("Water Authorities (Jal Shakti): ", "Automates reservoir tracking and wetland depletion monitoring without GIS staff."),
+        ("Urban Municipalities: ", "Detects unauthorized built-up sprawl and green cover loss via bi-temporal change maps."),
+        ("District Administrators: ", "Enables non-technical field officers to query satellite scenes in plain natural language."),
+        ("Agriculture & Forestry: ", "Tracks crop canopy stress, seasonal vegetation health, and illegal deforestation trends.")
     ]
 
     for lead, desc in audience_impacts:
-        p = tf_s5_1.add_paragraph(); p.space_before = Pt(7)
-        r1 = p.add_run(); r1.text = f"• {lead}"; r1.font.bold = True; r1.font.size = Pt(10.2); r1.font.color.rgb = DARK_GRAY
-        r2 = p.add_run(); r2.text = desc; r2.font.size = Pt(10.2); r2.font.color.rgb = DARK_GRAY
+        p = tf_s5_1.add_paragraph(); p.space_before = Pt(8)
+        r1 = p.add_run(); r1.text = f"• {lead}"; r1.font.bold = True; r1.font.size = Pt(10.5); r1.font.color.rgb = DARK_GRAY
+        r2 = p.add_run(); r2.text = desc; r2.font.size = Pt(10.5); r2.font.color.rgb = DARK_GRAY
 
-    # Card 2: Benefits of the Solution
+    # Card 2: Benefits of the solution
     c2_s5 = s5.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(0.5) + w_card_w + w_gap, c_top, w_card_w, c_h)
     c2_s5.fill.solid(); c2_s5.fill.fore_color.rgb = LIGHT_BG; c2_s5.line.color.rgb = CARD_BORDER; c2_s5.line.width = Pt(1.5)
 
@@ -369,21 +369,21 @@ def build_perfect_sih_deck():
     tf_s5_2 = tb_s5_2.text_frame; tf_s5_2.word_wrap = True
 
     p_s5_2 = tf_s5_2.paragraphs[0]
-    p_s5_2.text = "• Benefits of the Solution (Social, Commercial, Env.)"
-    p_s5_2.font.size = Pt(15); p_s5_2.font.bold = True; p_s5_2.font.color.rgb = NAVY
+    p_s5_2.text = "• Benefits of the solution (social, economic, environmental, etc.)"
+    p_s5_2.font.size = Pt(14); p_s5_2.font.bold = True; p_s5_2.font.color.rgb = NAVY
 
     benefits_bullets = [
-        ("Social & Humanitarian Impact: ", "Democratizes complex space technology. First responders can type plain-language queries and receive life-saving disaster maps in seconds."),
-        ("Economic & Cost Efficiency: ", "Reduces GIS workflow times by 95%; replaces expensive per-seat commercial GIS software licensing with an open-source, scalable platform."),
-        ("Environmental Sustainability: ", "Provides continuous, objective ecological monitoring for deforestation, wetland depletion, and urban heat island mitigation."),
-        ("National Self-Reliance (Atmanirbhar Bharat): ", "Natively leverages Indian space assets (ISRO Resourcesat, Cartosat, RISAT) via Bhoonidhi standards alongside global Sentinel constellations."),
-        ("Scalability & Commercial Potential: ", "Easily extensible to state-wide disaster management portals, smart cities, and private environmental audit firms.")
+        ("Social Impact: ", "Democratizes space technology; 24/7 cloud-proof situational awareness during crises."),
+        ("Economic Impact: ", "Reduces GIS turnaround by 90%; eliminates expensive per-seat software licenses (ArcGIS)."),
+        ("Environmental Impact: ", "Continuous, objective tracking of waterbody shrinkage, deforestation, and climate resilience."),
+        ("Strategic / Atmanirbhar Bharat: ", "Native support for Indian space data (ISRO Resourcesat, Cartosat, RISAT) via Bhoonidhi."),
+        ("Auditability & Trust: ", "Immutable telemetry logs with verifiable spatial masks and honest confidence scores.")
     ]
 
     for lead, desc in benefits_bullets:
-        p = tf_s5_2.add_paragraph(); p.space_before = Pt(7)
-        r1 = p.add_run(); r1.text = f"• {lead}"; r1.font.bold = True; r1.font.size = Pt(10.2); r1.font.color.rgb = DARK_GRAY
-        r2 = p.add_run(); r2.text = desc; r2.font.size = Pt(10.2); r2.font.color.rgb = DARK_GRAY
+        p = tf_s5_2.add_paragraph(); p.space_before = Pt(8)
+        r1 = p.add_run(); r1.text = f"• {lead}"; r1.font.bold = True; r1.font.size = Pt(10.5); r1.font.color.rgb = DARK_GRAY
+        r2 = p.add_run(); r2.text = desc; r2.font.size = Pt(10.5); r2.font.color.rgb = DARK_GRAY
 
     # =========================================================================
     # SLIDE 6: EXACT SIH TEMPLATE - RESEARCH & REFERENCES
