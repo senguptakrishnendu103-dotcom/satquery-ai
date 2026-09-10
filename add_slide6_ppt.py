@@ -55,17 +55,17 @@ def add_slide6():
 
     c1_hdr = s6.shapes.add_textbox(Inches(0.8), Inches(1.9), Inches(5.5), Inches(0.6))
     c1_hp = c1_hdr.text_frame.paragraphs[0]
-    c1_hp.text = "• Prescribed Datasets & Benchmarks"
-    c1_hp.font.size = Pt(16); c1_hp.font.bold = True; c1_hp.font.color.rgb = NAVY
+    c1_hp.text = "• Benchmark Datasets & Research Papers"
+    c1_hp.font.size = Pt(15); c1_hp.font.bold = True; c1_hp.font.color.rgb = NAVY
 
     c1_body = s6.shapes.add_textbox(Inches(0.8), Inches(2.5), Inches(5.5), Inches(4.1))
     c1_btf = c1_body.text_frame; c1_btf.word_wrap = True
 
     dataset_refs = [
-        ("1. BigEarthNet.txt (Primary Adaptation): ", "Reference: arXiv:2603.29630. Large-scale multimodal remote sensing dataset used for PEFT/LoRA fine-tuning of RemoteSensingVQAModel."),
-        ("2. RSVQA Benchmark (IEEE TGRS): ", "Lobry et al. 'RSVQA: Visual Question Answering for Remote Sensing Data'. Benchmark standard for quantitative single-image VQA evaluation."),
-        ("3. VRSBench Benchmark: ", "Visual remote sensing benchmark for text-guided region grounding, open-vocabulary localization, and descriptive scene captioning."),
-        ("4. CDVQA Benchmark: ", "Change Detection Visual Question Answering benchmark validating natural-language bi-temporal change understanding.")
+        ("BigEarthNet (Sumbul et al., 2019): ", "Multimodal Sentinel-1/2 benchmark for RS-VLM fine-tuning (arXiv:1902.06148)."),
+        ("RSVQA Benchmark (Lobry et al., IEEE TGRS): ", "Standard evaluation benchmark for Remote Sensing Visual Question Answering."),
+        ("VRSBench (Li et al., IEEE TGRS 2024): ", "Benchmark for text-guided visual grounding and remote sensing captioning."),
+        ("CDVQA (Yuan et al., IEEE GRSL 2022): ", "Bi-temporal change detection visual QA benchmark for multi-temporal analysis.")
     ]
 
     for idx, (lead, desc) in enumerate(dataset_refs):
@@ -74,24 +74,24 @@ def add_slide6():
         r1 = p.add_run(); r1.text = "• " + lead; r1.font.bold = True; r1.font.size = Pt(11); r1.font.color.rgb = DARK_GRAY
         r2 = p.add_run(); r2.text = desc; r2.font.bold = False; r2.font.size = Pt(10.5); r2.font.color.rgb = DARK_GRAY
 
-    # Card 2: Space Mission Standards & Geospatial Frameworks
+    # Card 2: Standards & Space Missions
     c2 = s6.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(6.8), Inches(1.8), Inches(5.9), Inches(4.9))
     c2.fill.solid(); c2.fill.fore_color.rgb = LIGHT_BG
     c2.line.color.rgb = CARD_BORDER; c2.line.width = Pt(1.5)
 
     c2_hdr = s6.shapes.add_textbox(Inches(7.0), Inches(1.9), Inches(5.5), Inches(0.6))
     c2_hp = c2_hdr.text_frame.paragraphs[0]
-    c2_hp.text = "• Sensor Specifications & Geospatial Standards"
-    c2_hp.font.size = Pt(16); c2_hp.font.bold = True; c2_hp.font.color.rgb = ACCENT_BLUE
+    c2_hp.text = "• Standards, Space Missions & Project Repository"
+    c2_hp.font.size = Pt(15); c2_hp.font.bold = True; c2_hp.font.color.rgb = ACCENT_BLUE
 
     c2_body = s6.shapes.add_textbox(Inches(7.0), Inches(2.5), Inches(5.5), Inches(4.1))
     c2_btf = c2_body.text_frame; c2_btf.word_wrap = True
 
     sensor_refs = [
-        ("5. ISRO / SAC Mission Specifications: ", "Cartosat-2S/3 Optical Product Manual & RISAT-1 / EOS-04 SAR Data User Handbook. Governs radiometric sigma-nought (σ⁰ dB) backscatter and metadata parsing in ISROProductAdapter."),
-        ("6. Open Geospatial Consortium (OGC) Standards: ", "Complies with OGC GeoTIFF, EPSG coordinate reference systems, and WGS84 standard bounding boxes for universal GIS interoperability."),
-        ("7. Core Geospatial Frameworks: ", "Built on Rasterio & GDAL C-bindings for affine matrix transformations, and MapLibre GL for GPU-accelerated WebGL vector rendering."),
-        ("8. Provenance & Code Traceability: ", "All implementation components mapped in our GitHub repository: github.com/akashsengupta/satquery-ai.")
+        ("ISRO / SAC Data Manuals: ", "Resourcesat-2A, Cartosat-3 & RISAT-1A (EOS-04) data formats (bhoonidhi.nrsc.gov.in)."),
+        ("ESA Copernicus Standards: ", "Sentinel-1 SAR & Sentinel-2 MSI data specifications (dataspace.copernicus.eu)."),
+        ("OGC & STAC Standards: ", "OGC GeoTIFF raster specifications, EPSG coordinate systems, and STAC catalog APIs."),
+        ("Open-Source Codebase: ", "Full SatQuery AI implementation & weights (github.com/senguptakrishnendu103-dotcom/satquery-ai).")
     ]
 
     for idx, (lead, desc) in enumerate(sensor_refs):

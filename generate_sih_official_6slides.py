@@ -393,10 +393,10 @@ def build_perfect_sih_deck():
 
     hdr_box6 = s6.shapes.add_textbox(Inches(0.5), Inches(1.45), Inches(12.333), Inches(0.6))
     h6_run = hdr_box6.text_frame.paragraphs[0].add_run()
-    h6_run.text = "❖ Research, Benchmarks & Geospatial Standards"
+    h6_run.text = "❖ Details / Links of the reference and research work"
     h6_run.font.size = Pt(23); h6_run.font.bold = True; h6_run.font.underline = True; h6_run.font.color.rgb = SIH_BLUE
 
-    # Card 1: Prescribed Datasets & Benchmarks
+    # Card 1: Benchmark Datasets & Research Papers
     c1_s6 = s6.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(0.5), c_top, w_card_w, c_h)
     c1_s6.fill.solid(); c1_s6.fill.fore_color.rgb = LIGHT_BG; c1_s6.line.color.rgb = CARD_BORDER; c1_s6.line.width = Pt(1.5)
 
@@ -404,22 +404,22 @@ def build_perfect_sih_deck():
     tf_s6_1 = tb_s6_1.text_frame; tf_s6_1.word_wrap = True
 
     p_s6_1 = tf_s6_1.paragraphs[0]
-    p_s6_1.text = "• Prescribed Datasets & Benchmarks Used"
-    p_s6_1.font.size = Pt(15); p_s6_1.font.bold = True; p_s6_1.font.color.rgb = NAVY
+    p_s6_1.text = "• Benchmark Datasets & Research Papers"
+    p_s6_1.font.size = Pt(14); p_s6_1.font.bold = True; p_s6_1.font.color.rgb = NAVY
 
     research_datasets = [
-        ("1. BigEarthNet (Sentinel-1 & Sentinel-2): ", "590,326 multi-spectral patches annotated with CORINE Land Cover (CLC) classes. Used for fine-tuning our BLIP VQA checkpoint (100% token F1 on test split). Reference: Sumbul et al., IEEE IGARSS 2019 / arXiv:1902.06148."),
-        ("2. RSVQA (Remote Sensing Visual Question Answering): ", "High-resolution aerial (RSVQA-HR) and low-resolution Sentinel-2 (RSVQA-LR) benchmarks establishing baseline QA accuracy. Reference: Lobry et al., IEEE TGRS 2020."),
-        ("3. VRSBench (Visual Reasoning in Remote Sensing): ", "Standardized benchmark for dense captioning, natural-language object grounding, and spatial reasoning. Reference: Li et al., IEEE TGRS 2024."),
-        ("4. CDVQA (Change Detection Visual QA): ", "Bi-temporal remote-sensing dataset for evaluating multi-temporal change detection through questions. Reference: Yuan et al., IEEE GRSL 2022.")
+        ("BigEarthNet (Sumbul et al., 2019): ", "Multimodal Sentinel-1/2 benchmark for RS-VLM fine-tuning (arXiv:1902.06148)."),
+        ("RSVQA Benchmark (Lobry et al., IEEE TGRS): ", "Standard evaluation benchmark for Remote Sensing Visual Question Answering."),
+        ("VRSBench (Li et al., IEEE TGRS 2024): ", "Benchmark for text-guided visual grounding and remote sensing captioning."),
+        ("CDVQA (Yuan et al., IEEE GRSL 2022): ", "Bi-temporal change detection visual QA benchmark for multi-temporal analysis.")
     ]
 
     for lead, desc in research_datasets:
-        p = tf_s6_1.add_paragraph(); p.space_before = Pt(7)
-        r1 = p.add_run(); r1.text = f"• {lead}"; r1.font.bold = True; r1.font.size = Pt(10.2); r1.font.color.rgb = DARK_GRAY
-        r2 = p.add_run(); r2.text = desc; r2.font.size = Pt(10.2); r2.font.color.rgb = DARK_GRAY
+        p = tf_s6_1.add_paragraph(); p.space_before = Pt(8)
+        r1 = p.add_run(); r1.text = f"• {lead}"; r1.font.bold = True; r1.font.size = Pt(10.5); r1.font.color.rgb = DARK_GRAY
+        r2 = p.add_run(); r2.text = desc; r2.font.size = Pt(10.5); r2.font.color.rgb = DARK_GRAY
 
-    # Card 2: Sensor Specifications & Standards
+    # Card 2: Mission Specifications, Standards & Project Repository
     c2_s6 = s6.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(0.5) + w_card_w + w_gap, c_top, w_card_w, c_h)
     c2_s6.fill.solid(); c2_s6.fill.fore_color.rgb = LIGHT_BG; c2_s6.line.color.rgb = CARD_BORDER; c2_s6.line.width = Pt(1.5)
 
@@ -427,20 +427,20 @@ def build_perfect_sih_deck():
     tf_s6_2 = tb_s6_2.text_frame; tf_s6_2.word_wrap = True
 
     p_s6_2 = tf_s6_2.paragraphs[0]
-    p_s6_2.text = "• Sensor Specifications & Geospatial Standards"
-    p_s6_2.font.size = Pt(15); p_s6_2.font.bold = True; p_s6_2.font.color.rgb = NAVY
+    p_s6_2.text = "• Standards, Space Missions & Project Repository"
+    p_s6_2.font.size = Pt(14); p_s6_2.font.bold = True; p_s6_2.font.color.rgb = NAVY
 
     sensor_standards = [
-        ("5. ISRO / SAC Mission Standards: ", "Resourcesat-2/2A LISS-4 (5.8m multispectral), Cartosat-1/2S/3 high-resolution terrain mapping, and RISAT-1A (EOS-04 C-band SAR). Ingested via NRSC Bhoonidhi OpenSearch/STAC APIs."),
-        ("6. ESA Copernicus Constellations: ", "Sentinel-1 (C-band SAR radar, dual-pol VV/VH) and Sentinel-2 (13-band MSI, 10m/20m multispectral). Ingested via Copernicus Data Space Ecosystem (CDSE) OData v4 APIs."),
-        ("7. Remote Sensing Spectral Indices: ", "Normalized Difference Water Index (NDWI) by McFeeters (1996) and Normalized Difference Built-Up Index (NDBI) by Zha et al. (2003)."),
-        ("8. Geospatial Data Standards: ", "Complies with Open Geospatial Consortium (OGC) specifications, SpatioTemporal Asset Catalog (STAC), GeoTIFF metadata, and EPSG Coordinate Reference Systems.")
+        ("ISRO / SAC Data Manuals: ", "Resourcesat-2A, Cartosat-3 & RISAT-1A (EOS-04) data formats (bhoonidhi.nrsc.gov.in)."),
+        ("ESA Copernicus Standards: ", "Sentinel-1 SAR & Sentinel-2 MSI data specifications (dataspace.copernicus.eu)."),
+        ("OGC & STAC Standards: ", "OGC GeoTIFF raster specifications, EPSG coordinate systems, and STAC catalog APIs."),
+        ("Open-Source Codebase: ", "Full SatQuery AI implementation & weights (github.com/senguptakrishnendu103-dotcom/satquery-ai).")
     ]
 
     for lead, desc in sensor_standards:
-        p = tf_s6_2.add_paragraph(); p.space_before = Pt(7)
-        r1 = p.add_run(); r1.text = f"• {lead}"; r1.font.bold = True; r1.font.size = Pt(10.2); r1.font.color.rgb = DARK_GRAY
-        r2 = p.add_run(); r2.text = desc; r2.font.size = Pt(10.2); r2.font.color.rgb = DARK_GRAY
+        p = tf_s6_2.add_paragraph(); p.space_before = Pt(8)
+        r1 = p.add_run(); r1.text = f"• {lead}"; r1.font.bold = True; r1.font.size = Pt(10.5); r1.font.color.rgb = DARK_GRAY
+        r2 = p.add_run(); r2.text = desc; r2.font.size = Pt(10.5); r2.font.color.rgb = DARK_GRAY
 
     # Save
     prs.save(output_path)
