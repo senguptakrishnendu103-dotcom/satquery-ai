@@ -292,22 +292,22 @@ def build_perfect_sih_deck():
 
     s4_sections = [
         ("• Analysis of the feasibility of the idea", [
-            ("Technical Feasibility: ", "Fully implemented and validated working prototype; successfully tested on BigEarthNet, Sentinel-1/2, and ISRO Resourcesat-2A rasters."),
-            ("Operational Feasibility: ", "Zero paid third-party API dependencies; completely self-contained architecture deployable locally or on air-gapped on-premise servers."),
-            ("Economic Viability: ", "Built 100% on open-source libraries (React, FastAPI, GDAL, PyTorch), eliminating expensive proprietary per-seat GIS licensing fees."),
-            ("Hardware Accessibility: ", "Optimized models run smoothly on standard workstation CPUs without requiring multi-GPU enterprise server clusters.")
+            ("Technical: ", "Proven working prototype tested on Sentinel-1/2, BigEarthNet, and ISRO rasters."),
+            ("Operational: ", "100% self-contained; zero paid API dependencies; works offline/air-gapped."),
+            ("Economic: ", "Open-source stack (GDAL, PyTorch); eliminates expensive per-seat GIS software fees."),
+            ("Hardware: ", "Runs smoothly on standard CPUs (<300ms) with optional CUDA acceleration.")
         ]),
         ("• Potential challenges and risks", [
-            ("Data Heterogeneity: ", "Varying coordinate reference systems (UTM vs Geographic), spatial resolutions (5.8m to 20m), and band channel orders across satellites."),
-            ("Atmospheric Obstruction: ", "Heavy monsoon cloud cover, shadowing, and haze frequently obscure critical optical satellite imagery during flood disasters."),
-            ("SAR Speckle Noise: ", "Granular noise artifacts in radar backscatter can cause false alarms in land-cover classification and edge detection."),
-            ("Hallucination Risk: ", "Generic commercial LLMs hallucinate inaccurate geo-features, nonexistent coordinates, and unverified confidence levels.")
+            ("Data Heterogeneity: ", "Varying CRS projections, resolutions (5.8m–20m), and band orders."),
+            ("Weather & Clouds: ", "Monsoon cloud cover and haze obscure critical optical satellite imagery."),
+            ("SAR Speckle Noise: ", "Radar backscatter noise artifacts causing false detection alarms."),
+            ("AI Hallucination: ", "Generic LLMs inventing ungrounded coordinates and false features.")
         ]),
         ("• Strategies for overcoming these challenges", [
-            ("Automated Normalization: ", "MetadataExtractor & RasterIngestor automatically detect CRS, reproject coordinates, and reorder spectral bands."),
-            ("Optical + SAR Cross-Fusion: ", "Synthetic Aperture Radar (SAR) microwave pulses penetrate clouds and rain, ensuring uninterrupted disaster monitoring."),
-            ("Dual-Polarization Thresholding: ", "Applies VV/VH backscatter ratio filtering and adaptive Otsu thresholding to suppress speckle and isolate water bodies."),
-            ("Strict Capability Routing: ", "Deterministic agent orchestrator and specialized spectral index tools eliminate hallucinations completely.")
+            ("Auto-Normalization: ", "Ingestor auto-detects CRS, aligns projections, and standardizes bands."),
+            ("Optical + SAR Fusion: ", "Radar microwaves pierce clouds and rain for 24/7 all-weather monitoring."),
+            ("Speckle Filtering: ", "VV/VH dual-polarization filtering and adaptive Otsu thresholding."),
+            ("Deterministic Routing: ", "Grounded pixel masks, audit logs, and calibrated confidence (84–98%).")
         ])
     ]
 
