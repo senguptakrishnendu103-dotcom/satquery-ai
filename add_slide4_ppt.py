@@ -50,17 +50,17 @@ def add_slide4():
 
     # 3 Cards Grid: Feasibility (Left), Challenges (Center), Strategies (Right)
     cards = [
-        ("Analysis of Feasibility", [
+        ("Analysis of the feasibility of the idea", [
             ("Technical: ", "Proven working end-to-end prototype integrating GeoTIFF ingestion, adapted RS-VLM, and React MapLibre GIS."),
             ("Operational: ", "Self-contained with zero proprietary API dependencies; runs portably on standard CPU hardware."),
             ("Economic: ", "Built on open-source libraries (GDAL/PyTorch), eliminating expensive per-seat GIS software licensing costs.")
         ], Inches(0.6), Inches(3.9)),
-        ("Potential Challenges & Risks", [
+        ("Potential challenges and risks", [
             ("Data Heterogeneity: ", "Varying Coordinate Reference Systems (CRS), spatial resolution (GSD), and band orders across sensors."),
             ("Atmospheric & Noise: ", "Optical scenes suffer cloud cover and shadowing; SAR imagery contains granular speckle noise."),
             ("AI Hallucination: ", "Standard vision-language models risk hallucinating ungrounded answers for indistinct satellite features.")
         ], Inches(4.7), Inches(3.9)),
-        ("Overcoming Strategies", [
+        ("Strategies for overcoming these challenges", [
             ("Automated Ingestion: ", "RasterIngestor auto-aligns CRS, resamples pixels, and calibrates SAR σ⁰ dB and optical reflectance."),
             ("Optical + SAR Synergy: ", "Fuses cloud-penetrating SAR radar backscatter with optical spectral context, filtering radar speckle."),
             ("Evidence & Audit: ", "Pairs all responses with spatial GeoJSON bounding boxes/masks, honest confidence, and immutable audit logs.")

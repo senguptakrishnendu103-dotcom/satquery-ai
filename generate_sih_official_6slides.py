@@ -291,19 +291,19 @@ def build_perfect_sih_deck():
     h4_run.font.size = Pt(23); h4_run.font.bold = True; h4_run.font.underline = True; h4_run.font.color.rgb = SIH_BLUE
 
     s4_sections = [
-        ("• Analysis of Feasibility", [
+        ("• Analysis of the feasibility of the idea", [
             ("Technical Feasibility: ", "Fully implemented and validated working prototype; successfully tested on BigEarthNet, Sentinel-1/2, and ISRO Resourcesat-2A rasters."),
             ("Operational Feasibility: ", "Zero paid third-party API dependencies; completely self-contained architecture deployable locally or on air-gapped on-premise servers."),
             ("Economic Viability: ", "Built 100% on open-source libraries (React, FastAPI, GDAL, PyTorch), eliminating expensive proprietary per-seat GIS licensing fees."),
             ("Hardware Accessibility: ", "Optimized models run smoothly on standard workstation CPUs without requiring multi-GPU enterprise server clusters.")
         ]),
-        ("• Potential Challenges & Risks", [
+        ("• Potential challenges and risks", [
             ("Data Heterogeneity: ", "Varying coordinate reference systems (UTM vs Geographic), spatial resolutions (5.8m to 20m), and band channel orders across satellites."),
             ("Atmospheric Obstruction: ", "Heavy monsoon cloud cover, shadowing, and haze frequently obscure critical optical satellite imagery during flood disasters."),
             ("SAR Speckle Noise: ", "Granular noise artifacts in radar backscatter can cause false alarms in land-cover classification and edge detection."),
             ("Hallucination Risk: ", "Generic commercial LLMs hallucinate inaccurate geo-features, nonexistent coordinates, and unverified confidence levels.")
         ]),
-        ("• Strategies to Overcome These Challenges", [
+        ("• Strategies for overcoming these challenges", [
             ("Automated Normalization: ", "MetadataExtractor & RasterIngestor automatically detect CRS, reproject coordinates, and reorder spectral bands."),
             ("Optical + SAR Cross-Fusion: ", "Synthetic Aperture Radar (SAR) microwave pulses penetrate clouds and rain, ensuring uninterrupted disaster monitoring."),
             ("Dual-Polarization Thresholding: ", "Applies VV/VH backscatter ratio filtering and adaptive Otsu thresholding to suppress speckle and isolate water bodies."),
