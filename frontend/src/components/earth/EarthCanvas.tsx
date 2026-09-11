@@ -40,6 +40,7 @@ interface EarthCanvasProps {
   selectedAOI?: [number, number, number, number] | null;
   onSelectAOI?: (bbox: [number, number, number, number] | null) => void;
   onOpenSatelliteSearch?: (bbox: [number, number, number, number]) => void;
+  onSelectObservation?: (id: string) => void;
 }
 
 type CanvasOverlayMode = 'EVIDENCE' | 'HEATMAP';
@@ -68,6 +69,7 @@ const MAP_STYLE: maplibregl.StyleSpecification = {
     'esri-satellite': {
       type: 'raster',
       tiles: [
+        'https://services.arcgisonline.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
         'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
       ],
       tileSize: 256,
@@ -86,9 +88,9 @@ const MAP_STYLE: maplibregl.StyleSpecification = {
   },
   layers: [
     {
-      id: 'esri-dark-layer',
+      id: 'esri-satellite-layer',
       type: 'raster',
-      source: 'esri-dark',
+      source: 'esri-satellite',
       minzoom: 0,
       maxzoom: 20,
       layout: {
@@ -96,9 +98,9 @@ const MAP_STYLE: maplibregl.StyleSpecification = {
       },
     },
     {
-      id: 'esri-satellite-layer',
+      id: 'esri-dark-layer',
       type: 'raster',
-      source: 'esri-satellite',
+      source: 'esri-dark',
       minzoom: 0,
       maxzoom: 20,
       layout: {
@@ -128,6 +130,7 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
   selectedAOI = null,
   onSelectAOI,
   onOpenSatelliteSearch,
+  onSelectObservation,
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -167,13 +170,13 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
     {
       id: 'base',
       name: 'DARK GIS BASEMAP',
-      visible: true,
+      visible: false,
       color: '#38BDF8',
     },
     {
       id: 'satellite',
       name: 'SATELLITE IMAGERY',
-      visible: false,
+      visible: true,
       color: '#10B981',
     },
     {
@@ -278,12 +281,8 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
       : candidate;
   };
 
-  // Automatically switch main screen display to SCENE_INSPECT mode when an image is selected or loaded
-  useEffect(() => {
-    if (activeObservation) {
-      setCanvasViewMode('SCENE_INSPECT');
-    }
-  }, [activeObservation?.id]);
+  // Keep GEOGRAPHIC map as default active mode so user always sees the satellite earth canvas
+  // Users can click 'Scene Inspect' in top toolbar if they want to view raw scene image card
 
   // Sync external selectedAOI
   useEffect(() => {
@@ -342,6 +341,7 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
     });
 
     mapRef.current = map;
+    (window as any)._map = map;
 
     map.on('load', () => {
       isMapLoadedRef.current = true;
@@ -413,6 +413,16 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
       if (localAOI) {
         renderAoiBox(map, localAOI);
       }
+
+      // Apply initial basemap visibility
+      const isSatVisible = mapLayers.find((l) => l.id === 'satellite')?.visible ?? false;
+      const isDarkVisible = mapLayers.find((l) => l.id === 'base')?.visible ?? true;
+      if (map.getLayer('esri-satellite-layer')) {
+        map.setLayoutProperty('esri-satellite-layer', 'visibility', isSatVisible ? 'visible' : 'none');
+      }
+      if (map.getLayer('esri-dark-layer')) {
+        map.setLayoutProperty('esri-dark-layer', 'visibility', (!isSatVisible && isDarkVisible) ? 'visible' : 'none');
+      }
     });
 
     map.on('zoom', () => {
@@ -483,24 +493,74 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
     });
   };
 
+  // Direct Basemap Mode Switcher
+  const setBasemapMode = (mode: 'satellite' | 'base') => {
+    // Always ensure we are in GEOGRAPHIC mode so the basemap is visible
+    setCanvasViewMode('GEOGRAPHIC');
+
+    const map = mapRef.current;
+    if (map) {
+      try {
+        if (mode === 'satellite') {
+          if (map.getLayer('esri-satellite-layer')) {
+            map.setLayoutProperty('esri-satellite-layer', 'visibility', 'visible');
+          }
+          if (map.getLayer('esri-dark-layer')) {
+            map.setLayoutProperty('esri-dark-layer', 'visibility', 'none');
+          }
+        } else {
+          if (map.getLayer('esri-dark-layer')) {
+            map.setLayoutProperty('esri-dark-layer', 'visibility', 'visible');
+          }
+          if (map.getLayer('esri-satellite-layer')) {
+            map.setLayoutProperty('esri-satellite-layer', 'visibility', 'none');
+          }
+        }
+      } catch (e) {
+        console.warn('Direct basemap switch warning:', e);
+      }
+    }
+
+    setMapLayers((prev) =>
+      prev.map((layer) => {
+        if (mode === 'satellite') {
+          if (layer.id === 'satellite') return { ...layer, visible: true };
+          if (layer.id === 'base') return { ...layer, visible: false };
+        } else {
+          if (layer.id === 'base') return { ...layer, visible: true };
+          if (layer.id === 'satellite') return { ...layer, visible: false };
+        }
+        return layer;
+      })
+    );
+  };
+
   // Synchronize Basemap, Satellite & Boundaries layers with LayerControl
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !map.isStyleLoaded()) return;
+    if (!map) return;
 
-    const isDarkVisible = mapLayers.find((l) => l.id === 'base')?.visible ?? true;
-    const isSatVisible = mapLayers.find((l) => l.id === 'satellite')?.visible ?? false;
-    const isBoundariesVisible = mapLayers.find((l) => l.id === 'boundaries')?.visible ?? true;
+    const applyLayers = () => {
+      const isDarkVisible = mapLayers.find((l) => l.id === 'base')?.visible ?? false;
+      const isSatVisible = mapLayers.find((l) => l.id === 'satellite')?.visible ?? true;
+      const isBoundariesVisible = mapLayers.find((l) => l.id === 'boundaries')?.visible ?? true;
 
-    if (map.getLayer('esri-dark-layer')) {
-      map.setLayoutProperty('esri-dark-layer', 'visibility', isDarkVisible ? 'visible' : 'none');
-    }
-    if (map.getLayer('esri-satellite-layer')) {
-      map.setLayoutProperty('esri-satellite-layer', 'visibility', isSatVisible ? 'visible' : 'none');
-    }
-    if (map.getLayer('boundaries-layer')) {
-      map.setLayoutProperty('boundaries-layer', 'visibility', isBoundariesVisible ? 'visible' : 'none');
-    }
+      try {
+        if (map.getLayer('esri-satellite-layer')) {
+          map.setLayoutProperty('esri-satellite-layer', 'visibility', isSatVisible ? 'visible' : 'none');
+        }
+        if (map.getLayer('esri-dark-layer')) {
+          map.setLayoutProperty('esri-dark-layer', 'visibility', isDarkVisible && !isSatVisible ? 'visible' : 'none');
+        }
+        if (map.getLayer('boundaries-layer')) {
+          map.setLayoutProperty('boundaries-layer', 'visibility', isBoundariesVisible ? 'visible' : 'none');
+        }
+      } catch (e) {
+        console.warn('Layer sync warning:', e);
+      }
+    };
+
+    applyLayers();
   }, [mapLayers]);
 
   // Synchronize Observation Footprint on Map
@@ -653,9 +713,33 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
   };
 
   const handleToggleLayer = (layerId: string) => {
+    if (layerId === 'satellite') {
+      const isCurrentlySat = mapLayers.find((l) => l.id === 'satellite')?.visible;
+      setBasemapMode(isCurrentlySat ? 'base' : 'satellite');
+      return;
+    }
+    if (layerId === 'base') {
+      const isCurrentlyBase = mapLayers.find((l) => l.id === 'base')?.visible;
+      setBasemapMode(isCurrentlyBase ? 'satellite' : 'base');
+      return;
+    }
+
+    // Other layers (boundaries, water, etc.)
+    const targetLayer = mapLayers.find((l) => l.id === layerId);
+    const newVisibility = !targetLayer?.visible;
+
+    const map = mapRef.current;
+    if (map && layerId === 'boundaries') {
+      try {
+        if (map.getLayer('boundaries-layer')) {
+          map.setLayoutProperty('boundaries-layer', 'visibility', newVisibility ? 'visible' : 'none');
+        }
+      } catch (e) {}
+    }
+
     setMapLayers((prev) =>
       prev.map((layer) =>
-        layer.id === layerId ? { ...layer, visible: !layer.visible } : layer
+        layer.id === layerId ? { ...layer, visible: newVisibility } : layer
       )
     );
   };
@@ -885,6 +969,38 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
             </div>
           )}
 
+          {/* SATELLITE BASEMAP TOGGLE ON TOP TOOLBAR */}
+          {canvasViewMode === 'GEOGRAPHIC' && (
+            <div className="pointer-events-auto flex items-center rounded-lg border border-sat-border bg-sat-surface/95 p-1 shadow-lg backdrop-blur-md font-mono text-[10px]">
+              <button
+                type="button"
+                onClick={() => setBasemapMode('base')}
+                className={`flex items-center gap-1.5 rounded px-2.5 py-1 font-bold transition-all cursor-pointer ${
+                  mapLayers.find((l) => l.id === 'base')?.visible
+                    ? 'bg-sat-panel text-sat-text border border-sat-borderLight shadow-xs font-extrabold'
+                    : 'text-sat-dim hover:text-sat-text'
+                }`}
+                title="Switch to Dark Vector GIS Basemap"
+              >
+                <span>Dark GIS</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setBasemapMode('satellite')}
+                className={`flex items-center gap-1.5 rounded px-2.5 py-1 font-bold transition-all cursor-pointer ${
+                  mapLayers.find((l) => l.id === 'satellite')?.visible
+                    ? 'bg-emerald-500 text-slate-950 shadow-md font-extrabold'
+                    : 'text-emerald-400 hover:text-emerald-300'
+                }`}
+                title="Switch to True Earth Satellite Imagery Basemap"
+              >
+                <Satellite className="h-3.5 w-3.5" />
+                <span>🛰️ Satellite Imagery</span>
+              </button>
+            </div>
+          )}
+
           {hasImages && canvasViewMode === 'SCENE_INSPECT' && (
             <div className="pointer-events-auto">
               <ComparisonView
@@ -1059,7 +1175,7 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
             "
           >
             {/* BASE IMAGE */}
-            {visibleLayerIds.includes('base') && (
+            {(visibleLayerIds.includes('base') || visibleLayerIds.includes('satellite')) && (
               <div className="absolute inset-0 overflow-hidden rounded-lg bg-sat-surface flex items-center justify-center">
                 {getObsImageUrl(compareMode === 'AFTER' && isMultiObs ? obsAfter : obsBefore) ? (
                   <img
@@ -1089,7 +1205,7 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
             )}
 
             {/* BEFORE / AFTER WIPE */}
-            {isMultiObs && compareMode === 'CHANGE' && visibleLayerIds.includes('base') && (
+            {isMultiObs && compareMode === 'CHANGE' && (visibleLayerIds.includes('base') || visibleLayerIds.includes('satellite')) && (
               <div
                 className="pointer-events-none absolute inset-0 overflow-hidden rounded-lg"
                 style={{
@@ -1298,6 +1414,68 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
               label="CHANGE HEATMAP"
               onClick={() => setOverlayMode('HEATMAP')}
             />
+          </div>
+        </div>
+      )}
+
+      {/* ==========================================================
+          SATELLITE OBSERVATIONS QUICK SWITCHER RIBBON
+      ========================================================== */}
+      {observations.length > 0 && (
+        <div className="absolute bottom-12 left-4 right-4 z-30 pointer-events-none flex justify-center">
+          <div className="pointer-events-auto flex items-center gap-1.5 overflow-x-auto max-w-full rounded-xl border border-sat-border bg-sat-surface/95 px-2.5 py-1.5 shadow-2xl backdrop-blur-xl scrollbar-none">
+            <div className="flex items-center gap-1 shrink-0 pr-1.5 border-r border-sat-border/60 text-[9px] font-bold font-mono text-sat-accent uppercase tracking-wider">
+              <Satellite className="h-3 w-3 text-sat-accent animate-pulse" />
+              <span className="hidden sm:inline">SATELLITE IMAGERY ({observations.length}):</span>
+            </div>
+
+            {observations.map((obs) => {
+              const isActive = activeObservationIds.includes(obs.id);
+              const isPrimary = obsBefore?.id === obs.id;
+              const imgUrl = getObsImageUrl(obs);
+
+              return (
+                <button
+                  key={obs.id}
+                  type="button"
+                  onClick={() => onSelectObservation ? onSelectObservation(obs.id) : null}
+                  className={`
+                    flex items-center gap-1.5 shrink-0 rounded-lg px-2 py-1 transition-all text-left cursor-pointer border text-[9px] font-mono
+                    ${isPrimary
+                      ? 'border-sat-accent bg-sat-accent/20 text-sat-text font-bold shadow-sm'
+                      : isActive
+                        ? 'border-sat-accent/40 bg-sat-panel/80 text-sat-text hover:border-sat-accent'
+                        : 'border-sat-border bg-sat-bg/70 text-sat-muted hover:text-sat-text hover:bg-sat-panel'
+                    }
+                  `}
+                  title={`Click to view: ${obs.name} (${obs.modality})`}
+                >
+                  {imgUrl ? (
+                    <img
+                      src={imgUrl}
+                      alt={obs.name}
+                      className="h-4 w-4 rounded object-cover border border-sat-border shrink-0"
+                    />
+                  ) : (
+                    <Satellite className="h-3 w-3 shrink-0 text-sat-dim" />
+                  )}
+
+                  <span className="truncate max-w-[130px] font-sans font-medium">
+                    {obs.name}
+                  </span>
+
+                  <span className={`text-[7px] uppercase font-bold px-1 rounded border ${
+                    obs.modality === 'SAR'
+                      ? 'border-violet-500/30 bg-violet-500/10 text-violet-400'
+                      : obs.modality === 'MULTISPECTRAL'
+                        ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
+                        : 'border-sat-accent/30 bg-sat-accent/10 text-sat-accent'
+                  }`}>
+                    {obs.modality}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </div>
       )}

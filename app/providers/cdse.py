@@ -115,6 +115,14 @@ class CDSEProvider(SatelliteDataProvider):
     def supported_collections(self) -> List[str]:
         return list(SUPPORTED_CDSE_COLLECTIONS)
 
+    def _resolve_credentials(self) -> Tuple[str, str, str, str]:
+        """Dynamically resolve credentials from instance or environment, stripping quotes/spaces."""
+        user_val = (self._username or os.getenv("CDSE_USERNAME") or "").strip().strip("'\"")
+        pass_val = (self._password or os.getenv("CDSE_PASSWORD") or "").strip().strip("'\"")
+        cid_val = (self._client_id or os.getenv("CDSE_CLIENT_ID") or "").strip().strip("'\"")
+        csec_val = (self._client_secret or os.getenv("CDSE_CLIENT_SECRET") or "").strip().strip("'\"")
+        return user_val, pass_val, cid_val, csec_val
+
     def has_configured_credentials(self) -> bool:
         """Check if valid CDSE username/password or client_id/client_secret are configured."""
         invalid_placeholders = {
@@ -125,10 +133,7 @@ class CDSEProvider(SatelliteDataProvider):
             "",
         }
 
-        user_val = (self._username or "").strip()
-        pass_val = (self._password or "").strip()
-        cid_val = (self._client_id or "").strip()
-        csec_val = (self._client_secret or "").strip()
+        user_val, pass_val, cid_val, csec_val = self._resolve_credentials()
 
         has_user_pass = bool(
             user_val
@@ -176,36 +181,37 @@ class CDSEProvider(SatelliteDataProvider):
                 return False
 
             invalid_placeholders = {"your_cdse_username", "your_cdse_password", "your_cdse_client_id", "your_cdse_client_secret", ""}
+            user_val, pass_val, cid_val, csec_val = self._resolve_credentials()
             has_client_credentials = bool(
-                self._client_id and self._client_secret
-                and self._client_id.strip() not in invalid_placeholders
-                and self._client_secret.strip() not in invalid_placeholders
+                cid_val and csec_val
+                and cid_val not in invalid_placeholders
+                and csec_val not in invalid_placeholders
             )
             has_user_pass = bool(
-                self._username and self._password
-                and self._username.strip() not in invalid_placeholders
-                and self._password.strip() not in invalid_placeholders
+                user_val and pass_val
+                and user_val not in invalid_placeholders
+                and pass_val not in invalid_placeholders
             )
 
             # For downloads, prefer user_pass if available to ensure correct audience for CDSE Zipper
             if for_download and has_user_pass:
                 auth_data = {
                     "client_id": "cdse-public",
-                    "username": self._username.strip(),
-                    "password": self._password.strip(),
+                    "username": user_val,
+                    "password": pass_val,
                     "grant_type": "password",
                 }
             elif has_client_credentials:
                 auth_data = {
-                    "client_id": self._client_id.strip(),
-                    "client_secret": self._client_secret.strip(),
+                    "client_id": cid_val,
+                    "client_secret": csec_val,
                     "grant_type": "client_credentials",
                 }
             elif has_user_pass:
                 auth_data = {
                     "client_id": "cdse-public",
-                    "username": self._username.strip(),
-                    "password": self._password.strip(),
+                    "username": user_val,
+                    "password": pass_val,
                     "grant_type": "password",
                 }
             else:

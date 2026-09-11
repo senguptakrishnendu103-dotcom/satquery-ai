@@ -13,7 +13,7 @@ import type {
   ModalityType,
 } from './types/satquery';
 
-import { DEMO_SCENARIOS } from './data/demoScenarios';
+import { DEMO_SCENARIOS, ALL_DEFAULT_OBSERVATIONS } from './data/demoScenarios';
 
 import {
   satQueryService,
@@ -308,14 +308,14 @@ export function App() {
     observations,
     setObservations,
   ] = useState<Observation[]>(
-    []
+    ALL_DEFAULT_OBSERVATIONS
   );
 
   const [
     activeObservationIds,
     setActiveObservationIds,
   ] = useState<string[]>(
-    []
+    ALL_DEFAULT_OBSERVATIONS.map(o => o.id)
   );
 
 
@@ -571,6 +571,24 @@ export function App() {
         null
       );
     };
+
+
+  const handleSelectAllObservations = () => {
+    setActiveObservationIds(observations.map(o => o.id));
+  };
+
+  const handleLoadAllSatelliteImages = () => {
+    setObservations(ALL_DEFAULT_OBSERVATIONS);
+    setActiveObservationIds(ALL_DEFAULT_OBSERVATIONS.map(o => o.id));
+    setActiveView('WORKSPACE');
+  };
+
+  const handleFocusObservation = (id: string) => {
+    setActiveObservationIds(previous => {
+      const rest = previous.filter(x => x !== id);
+      return [id, ...rest];
+    });
+  };
 
 
   // ==========================================================
@@ -1234,6 +1252,10 @@ export function App() {
                       handleOpenSatelliteSearchWithAOI
                     }
 
+                    onSelectObservation={
+                      handleFocusObservation
+                    }
+
                     onSelectDemoScenario={
                       (
                         demoId
@@ -1409,6 +1431,18 @@ export function App() {
 
                         onAddObservation={
                           handleAddObservation
+                        }
+
+                        onSelectAllObservations={
+                          handleSelectAllObservations
+                        }
+
+                        onLoadAllSatelliteImages={
+                          handleLoadAllSatelliteImages
+                        }
+
+                        onFocusObservation={
+                          handleFocusObservation
                         }
 
                         onObservationAdded={

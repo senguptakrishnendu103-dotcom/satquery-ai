@@ -46,6 +46,9 @@ interface ObservationPanelProps {
   isSearchModalOpen?: boolean;
   onOpenSearchModal?: () => void;
   onCloseSearchModal?: () => void;
+  onSelectAllObservations?: () => void;
+  onLoadAllSatelliteImages?: () => void;
+  onFocusObservation?: (id: string) => void;
 }
 
 /*
@@ -174,6 +177,9 @@ export const ObservationPanel: React.FC<ObservationPanelProps> = ({
   isSearchModalOpen: _propIsSearchModalOpen,
   onOpenSearchModal,
   onCloseSearchModal: _onCloseSearchModal,
+  onSelectAllObservations,
+  onLoadAllSatelliteImages,
+  onFocusObservation,
 }) => {
   const [selectedModality] =
     useState<ModalityType>('OPTICAL');
@@ -321,13 +327,27 @@ export const ObservationPanel: React.FC<ObservationPanelProps> = ({
           </div>
         </div>
 
-        <div className="mt-3 flex items-center gap-2 text-xs font-medium text-sat-dim">
-          <CheckCircle2 className="h-3.5 w-3.5 text-sat-stable" />
-          <span>
-            {observations.length === 0
-              ? 'No data added yet'
-              : `${observations.length} dataset${observations.length === 1 ? '' : 's'} available`}
-          </span>
+        <div className="mt-3 flex items-center justify-between text-xs font-medium text-sat-dim">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="h-3.5 w-3.5 text-sat-stable" />
+            <span>
+              {observations.length === 0
+                ? 'No data added yet'
+                : `${observations.length} dataset${observations.length === 1 ? '' : 's'} available`}
+            </span>
+          </div>
+
+          {onLoadAllSatelliteImages && (
+            <button
+              type="button"
+              onClick={onLoadAllSatelliteImages}
+              className="flex items-center gap-1 rounded border border-sat-accent/40 bg-sat-accent/10 px-2 py-0.5 text-[10px] font-bold text-sat-accent hover:bg-sat-accent/20 transition-all cursor-pointer shadow-xs"
+              title="Click to load all 6 benchmark satellite observations"
+            >
+              <Sparkles className="h-3 w-3" />
+              <span>Load All Imagery</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -856,14 +876,39 @@ export const ObservationPanel: React.FC<ObservationPanelProps> = ({
 
         {observations.length > 0 && (
           <div className="border-b border-sat-border p-4">
-            <PanelSectionHeader
-              icon={<Layers className="h-3.5 w-3.5" />}
-              title="Added Data"
-              meta={`${observations.length}`}
-            />
+            <div className="flex items-center justify-between">
+              <PanelSectionHeader
+                icon={<Layers className="h-3.5 w-3.5" />}
+                title="Added Data"
+                meta={`${observations.length}`}
+              />
+
+              <div className="flex items-center gap-1.5">
+                {onSelectAllObservations && (
+                  <button
+                    type="button"
+                    onClick={onSelectAllObservations}
+                    className="px-2 py-0.5 rounded text-[10px] font-bold text-sat-accent hover:bg-sat-accent/15 border border-sat-accent/30 transition-all cursor-pointer"
+                    title="Select all observations for simultaneous reasoning"
+                  >
+                    Select All
+                  </button>
+                )}
+                {onLoadAllSatelliteImages && observations.length < 6 && (
+                  <button
+                    type="button"
+                    onClick={onLoadAllSatelliteImages}
+                    className="px-2 py-0.5 rounded text-[10px] font-semibold text-sat-dim hover:text-sat-text hover:bg-sat-panel border border-sat-border transition-all cursor-pointer"
+                    title="Load all available satellite images"
+                  >
+                    All (6)
+                  </button>
+                )}
+              </div>
+            </div>
 
             <p className="mt-1 text-[8px] leading-4 text-sat-dim">
-              Select the datasets you want SATQuery to use.
+              Click any image to view it immediately on the canvas, or check to include in analysis.
             </p>
 
             <div className="mt-3 space-y-2.5">
@@ -913,8 +958,9 @@ export const ObservationPanel: React.FC<ObservationPanelProps> = ({
 
                         <button
                           type="button"
-                          onClick={() => onToggleObservation(obs.id)}
-                          className="min-w-0 flex-1 truncate text-left text-[10px] font-bold text-sat-text hover:text-sat-accent"
+                          onClick={() => onFocusObservation ? onFocusObservation(obs.id) : onToggleObservation(obs.id)}
+                          className="min-w-0 flex-1 truncate text-left text-[10px] font-bold text-sat-text hover:text-sat-accent cursor-pointer"
+                          title="Click to display this satellite image"
                         >
                           {obs.name}
                         </button>
@@ -925,12 +971,16 @@ export const ObservationPanel: React.FC<ObservationPanelProps> = ({
                       </div>
 
                       <div className="mt-3 grid grid-cols-12 gap-3">
-                        <div className="col-span-4 aspect-square overflow-hidden rounded-md border border-sat-border bg-sat-bg relative">
+                        <div
+                          onClick={() => onFocusObservation ? onFocusObservation(obs.id) : onToggleObservation(obs.id)}
+                          className="col-span-4 aspect-square overflow-hidden rounded-md border border-sat-border bg-sat-bg relative cursor-pointer hover:border-sat-accent transition-colors group"
+                          title="Click to display this satellite image on canvas"
+                        >
                           {obs.thumbnailUrl || obs.imageUrl ? (
                             <img
                               src={obs.thumbnailUrl || obs.imageUrl}
                               alt={`${obs.name} satellite observation`}
-                              className="h-full w-full object-cover transition-transform duration-500 hover:scale-105"
+                              className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
                               loading="lazy"
                               onError={(e) => {
                                 (e.currentTarget as HTMLElement).style.display = 'none';

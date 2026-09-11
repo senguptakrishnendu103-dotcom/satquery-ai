@@ -446,3 +446,12 @@ export const DEMO_SCENARIOS: DemoScenario[] = [
     }
   }
 ];
+
+export const ALL_DEFAULT_OBSERVATIONS: Observation[] = [
+  DEMO_SCENARIOS[0].observations[0], // Palma Port Optical Observation
+  DEMO_SCENARIOS[1].observations[0], // Lake Reservoir Multispectral Observation
+  DEMO_SCENARIOS[2].observations[0], // Coastal Urban Baseline (2024)
+  DEMO_SCENARIOS[2].observations[1], // Coastal Urban Recent Observation (2026)
+  DEMO_SCENARIOS[3].observations[0], // Pre-Event Sentinel-2 Optical
+  DEMO_SCENARIOS[3].observations[1], // Post-Event Sentinel-1 SAR Radar
+];

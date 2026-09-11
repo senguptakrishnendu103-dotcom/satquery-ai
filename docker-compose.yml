@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  satquery-ai:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: satquery-ai-platform
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
+      - CDSE_CLIENT_ID=${CDSE_CLIENT_ID}
+      - CDSE_CLIENT_SECRET=${CDSE_CLIENT_SECRET}
+      - BHOONIDHI_API_URL=${BHOONIDHI_API_URL}
+      - BHOONIDHI_USERNAME=${BHOONIDHI_USERNAME}
+      - BHOONIDHI_PASSWORD=${BHOONIDHI_PASSWORD}
+      - SATQUERY_MAX_UPLOAD_MB=500
+    restart: unless-stopped
